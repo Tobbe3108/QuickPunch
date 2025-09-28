@@ -5,4 +5,5 @@ yarn.lock
 bun.lock
 bun.lockb
 
-**/.github/chatmodes/*.md
+# Miscellaneous
+/static/
