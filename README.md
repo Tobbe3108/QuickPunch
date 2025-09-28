@@ -39,3 +39,63 @@ Enable fast, accurate daily work hour tracking with minimal effort, supporting l
 ## Design Principles
 - Minimal, fast, and focused on quick time entry.
 - Clear display of today’s times and easy record management.
+
+# High-Level Architecture
+
+**Component Diagram:**
+
+- **App Shell (Svelte 5 SPA)**
+  - Main View: Meet, Leave, Lunch buttons; today’s summary; edit/delete actions.
+  - History View: Table/list of previous days; edit/delete.
+  - Reporting View: Table with copyable values.
+- **State Management**
+  - Svelte stores for UI state.
+- **Persistence Layer**
+  - IndexedDB (via a lightweight wrapper or direct API).
+- **Styling**
+  - TailwindCSS for rapid, responsive UI.
+- **Clipboard Utility**
+  - Per-value copy logic (using browser Clipboard API).
+
+---
+
+## Data Flow & Storage Strategy
+
+- **Data Model:**  
+  Each record: { date, meetTime, leaveTime, lunchStart, lunchEnd, internalCompanyTime, workTime }
+- **Persistence:**  
+  - All CRUD operations interact with IndexedDB.
+  - Svelte store syncs with IndexedDB on load/change.
+- **No Export/Import:**  
+  - No backup/migration features required.
+
+---
+
+## Technology Stack
+
+- **Frontend:** Svelte 5 (SPA)
+- **Build Tool:** Vite
+- **Styling:** TailwindCSS
+- **Persistence:** IndexedDB (browser-native, no external dependencies)
+- **Clipboard:** Browser Clipboard API
+- **Hosting:** GitHub Pages (static site)
+
+---
+
+## Optimizations & Best Practices
+
+- Use a small IndexedDB wrapper for easier CRUD (e.g., idb-keyval).
+- Structure Svelte components for maintainability (Main, History, Reporting).
+- Use Tailwind’s utility classes for rapid prototyping and responsive tweaks.
+- Implement clipboard copy with clear feedback (e.g., tooltip or toast).
+- Document calculation logic and UI flows for future maintainers.
+
+---
+
+## Implementation Guidelines
+
+- Organize code into logical Svelte components.
+- Centralize IndexedDB logic in a service module.
+- Use Svelte stores for reactive UI updates.
+- Ensure all UI elements are accessible and keyboard-friendly.
+- Add clear instructions for GitHub Pages deployment in the README.
