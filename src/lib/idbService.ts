@@ -1,4 +1,3 @@
-import { writable, type Writable } from 'svelte/store';
 import { get, set, del, keys } from 'idb-keyval';
 
 export const idb = {
@@ -15,23 +14,3 @@ export const idb = {
 		return await keys();
 	}
 };
-
-// Svelte store factory with IndexedDB persistence
-export function persistentStore<T>(key: string, initial: T): Writable<T> {
-	const store = writable<T>(initial);
-
-	// Only run persistence logic in browser
-	if (typeof window !== 'undefined') {
-		// Load from IndexedDB on init
-		idb.get<T>(key).then((value) => {
-			if (value !== undefined) store.set(value);
-		});
-
-		// Subscribe to changes and persist
-		store.subscribe((value: T) => {
-			idb.set<T>(key, value);
-		});
-	}
-
-	return store;
-}

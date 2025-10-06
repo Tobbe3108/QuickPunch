@@ -1,16 +1,28 @@
 <script lang="ts">
 	import type { TimeRecord } from '$lib/models/TimeRecord';
-	import { persistentStore } from '$lib/idbService';
+	import { idb } from '$lib/idbService';
 	import { format, differenceInMilliseconds } from 'date-fns';
+	import { onMount } from 'svelte';
 
-	let toast = $state('');
+	const todayKey = 'record-' + format(new Date(), 'yyyy-MM-dd');
 
-	const record = persistentStore<TimeRecord>('record-' + format(new Date(), 'yyyy-MM-dd'), {
+	let record = $state<TimeRecord>({
 		date: new Date(),
 		Durations: []
 	});
+	let toast = $state('');
 
-	const workDurations = $derived(() => $record.Durations ?? []);
+	onMount(() => {
+		idb.get<TimeRecord>(todayKey).then((value) => {
+			if (value) record = value;
+		});
+	});
+
+	$effect(() => {
+		idb.set<TimeRecord>(todayKey, $state.snapshot(record));
+	});
+
+	const workDurations = $derived(() => record.Durations ?? []);
 
 	const activeDuration = $derived(() => {
 		const ds = workDurations();
@@ -26,16 +38,16 @@
 		}
 
 		let lunchMilliseconds = 0;
-		if ($record.lunchDuration?.start && $record.lunchDuration?.end) {
+		if (record.lunchDuration?.start && record.lunchDuration?.end) {
 			lunchMilliseconds = differenceInMilliseconds(
-				$record.lunchDuration.end,
-				$record.lunchDuration.start
+				record.lunchDuration.end,
+				record.lunchDuration.start
 			);
 		}
 
 		let internalMilliseconds = 0;
-		if ($record.internalCompanyTime) {
-			internalMilliseconds = $record.internalCompanyTime.getTime();
+		if (record.internalCompanyTime) {
+			internalMilliseconds = record.internalCompanyTime.getTime();
 		}
 
 		let workTimeMilliseconds = totalMilliseconds - lunchMilliseconds + internalMilliseconds;
@@ -46,52 +58,37 @@
 	const availableActions = $derived(() => {
 		return [
 			!activeDuration() ? 'workStart' : 'workStop',
-			!$record.lunchDuration?.start ? 'lunchStart' : !$record.lunchDuration?.end ? 'lunchEnd' : null
+			!record.lunchDuration?.start ? 'lunchStart' : !record.lunchDuration?.end ? 'lunchEnd' : null
 		].filter(Boolean);
 	});
 
 	function handleWorkStart() {
-		record.update((r) => {
-			const now = new Date();
-			const ds = [...(r.Durations ?? []), { start: now, end: undefined }];
-			let lunchDuration = r.lunchDuration;
-			// If lunch is active (started but not ended), end it
-			if (lunchDuration?.start && !lunchDuration?.end) {
-				lunchDuration = { ...lunchDuration, end: now };
-			}
-			return { ...r, Durations: ds, lunchDuration };
-		});
+		const now = new Date();
+		if (record.lunchDuration?.start && !record.lunchDuration?.end) {
+			record.lunchDuration.end = now;
+		}
+
+		record.Durations?.push({ start: now });
+
 		toast = 'Work started.';
 	}
 
 	function handleWorkStop() {
-		record.update((r) => {
-			const ds = r.Durations ?? [];
-			if (!ds.length) return r;
-			const newDs = ds.map((d, i) =>
-				i === ds.length - 1 && !d.end ? { ...d, end: new Date() } : d
-			);
-			return { ...r, Durations: newDs };
-		});
+		const active = activeDuration();
+		active!.end = new Date();
 		toast = 'Work stopped.';
 	}
 
 	function handleLunchStart() {
-		record.update((r) => {
-			const ds = r.Durations ?? [];
-			let newDs = ds;
-			if (ds.length && !ds[ds.length - 1].end) {
-				newDs = ds.map((d, i) => (i === ds.length - 1 && !d.end ? { ...d, end: new Date() } : d));
-			}
-			return { ...r, Durations: newDs, lunchDuration: { start: new Date(), end: undefined } };
-		});
+		const now = new Date();
+		const active = activeDuration();
+		if (active && !active.end) active.end = now;
+		record.lunchDuration = { start: now };
 		toast = 'Lunch started.';
 	}
 
 	function handleLunchEnd() {
-		record.update((r) =>
-			r.lunchDuration ? { ...r, lunchDuration: { ...r.lunchDuration, end: new Date() } } : r
-		);
+		record.lunchDuration!.end = new Date();
 		toast = 'Lunch ended';
 	}
 
@@ -100,13 +97,9 @@
 	}
 
 	function handleDelete(field: keyof TimeRecord) {
-		record.update((r) => {
-			const copy = { ...r };
-			if (field === 'Durations') copy.Durations = [];
-			else if (field === 'lunchDuration') copy.lunchDuration = undefined;
-			else if (field === 'internalCompanyTime') copy.internalCompanyTime = undefined;
-			return copy;
-		});
+		if (field === 'Durations') record.Durations = [];
+		else if (field === 'lunchDuration') record.lunchDuration = undefined;
+		else if (field === 'internalCompanyTime') record.internalCompanyTime = undefined;
 		toast = `${field} deleted.`;
 	}
 
@@ -116,19 +109,19 @@
 	}
 
 	function handleWipeDay() {
-		record.set({
+		record = {
 			date: new Date(),
 			Durations: [],
 			lunchDuration: undefined,
 			internalCompanyTime: undefined
-		});
+		};
 		toast = "Today's state wiped";
 	}
 </script>
 
 <main class="mx-auto mt-8 max-w-md rounded bg-white p-4 shadow">
 	<h1 class="mb-2 text-xl font-bold">QuickPunch</h1>
-	<div class="mb-4 text-gray-600">{format($record.date, 'PPP')}</div>
+	<div class="mb-4 text-gray-600">{format(record.date, 'PPP')}</div>
 
 	<div class="mb-4 flex flex-col gap-2">
 		{#if availableActions()[0] === 'workStart'}
@@ -160,7 +153,7 @@
 				</li>
 			{/each}
 			<li>
-				Lunch: {fmtTime($record.lunchDuration?.start)} - {fmtTime($record.lunchDuration?.end)}
+				Lunch: {fmtTime(record.lunchDuration?.start)} - {fmtTime(record.lunchDuration?.end)}
 				<button class="ml-2 text-xs text-blue-600" onclick={() => handleEdit('lunchDuration')}
 					>Edit</button
 				>
