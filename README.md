@@ -11,18 +11,25 @@ Enable fast, accurate daily work hour tracking with minimal effort, supporting l
 ## User Flow
 1. **Start of Day:** User opens app, sees today’s date.
 2. **Time Entry:**
-- User is presented with a single, full-width button for the next required action ("Meet" on arrival, then "Leave" at departure).
-- "Lunch" is an optional step: after "Meet", the user can either record lunch ("Start Lunch"/"End Lunch") or skip directly to "Leave".
-- The flow enforces that "Meet" and "Leave" must be recorded in order; lunch can be skipped.
-3. **Review:** Today’s times are shown immediately, with options to edit or delete.
-4. **History:** Past days are listed for review, editing, or deletion.
-5. **Reporting:** Table view for manual transfer, with input for internal company time and copy-to-clipboard actions.
-
-- **Main View:**
-- Flow-based: Only one large, context-sensitive button is shown at a time, filling the page (e.g., Meet, Pause, Resume, Start Lunch, End Lunch, Leave).
-- After each action, the button updates to the next logical step, guiding the user through the day, including pause/resume cycles.
-- Minimal summary of today’s segments and times shown below the button, with quick access to edit/undo for corrections. Paused state is clearly indicated.
-- No other controls or distractions until their step is reached.
+User is presented with context-sensitive buttons for starting/stopping work segments and starting/ending lunch.
+Work is tracked as one or more segments (each with a start and stop time).
+Lunch is tracked as a separate duration (start and end time), and can be edited or deleted independently.
+The flow allows multiple work segments per day, and lunch can be skipped or recorded as needed.
+Flow-based: Only one main action button is visible at a time, based on current state (e.g., Start Work, Stop Work, Start Lunch, End Lunch).
+After each action, the button updates to the next logical step, guiding the user through the day. Multiple work segments are supported.
+Minimal summary of today's work segments and lunch duration is shown below the buttons, with edit/delete options for lunch. Active work segment is clearly indicated.
+**Calculation Logic**
+**Work Time:**
+$$
+	ext{Work Time} = \sum_{i=1}^n (\text{Work Stop}_i - \text{Work Start}_i) - \text{Lunch Duration} - \text{Internal Company Time}
+$$
+- Work segments are summed from all start/stop pairs for the day.
+- Lunch duration is subtracted if present.
+- Internal company time is subtracted if present.
+- Lunch can be edited or deleted independently.
+**App Shell (Svelte 5 SPA)**
+  - Main View: Start/Stop Work buttons (multiple segments), Lunch buttons (start/end), summary of segments and lunch, edit/delete for lunch, work time calculation.
+Main view uses a state-driven flow to determine which button/action is shown, supports multiple work segments, and provides logic for lunch as a separate duration.
 
 - **History View:**
 - List/table of previous days, with management actions.
