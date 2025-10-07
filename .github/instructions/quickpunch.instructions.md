@@ -1,5 +1,5 @@
 ---
-applyTo: "src/**"
+applyTo: 'src/**'
 ---
 
 # QuickPunch Developer & Maintainer Instructions
@@ -23,9 +23,11 @@ QuickPunch is a fast, minimal time tracking app designed for daily work hour rec
 1. **Start of Day:**
    - User opens app, sees today’s date.
 2. **Time Entry:**
-   - "Meet" records arrival time.
-   - "Lunch" toggles lunch start/stop. If lunch < 30 min, use actual; if ≥ 30 min, default to 30 min.
-   - "Leave" records departure time.
+
+- Work is tracked as one or more segments (each with a start and stop time).
+- Lunch is tracked as a separate duration (start and end time), and can be edited or deleted independently.
+- The flow allows multiple work segments per day, and lunch can be skipped or recorded as needed.
+
 3. **Review:**
    - Today’s times shown immediately; options to edit/delete.
 4. **History:**
@@ -40,8 +42,9 @@ QuickPunch is a fast, minimal time tracking app designed for daily work hour rec
 ### 4.1 Component Structure
 
 - **Main View:**
-  - Three buttons: Meet, Leave, Lunch (toggle).
-  - Summary of today’s times with edit/delete icons.
+  - Context-sensitive buttons for starting/stopping work segments and starting/ending lunch.
+  - Work segments are tracked as start/stop pairs; lunch is a separate duration.
+  - Summary of today's work segments and lunch duration, with edit/delete for lunch.
 - **History View:**
   - List/table of previous days with management actions.
 - **Reporting View:**
@@ -82,23 +85,26 @@ Each record:
 ```js
 {
   date,
-    meetTime,
-    leaveTime,
-    lunchStart,
-    lunchEnd,
-    internalCompanyTime,
-    workTime;
+  Durations: [ { start, end? } ], // work segments
+  lunchDuration: { start, end? },
+  internalCompanyTime,
+  workTime
 }
 ```
 
 ### 5.2 Calculation
 
-- **Work Time:**
-  $$
-  \text{Work Time} = (\text{Leave Time} - \text{Meet Time}) - \text{Lunch Time} - \text{Internal Company Time}
-  $$
-- Lunch time: If duration < 30 min, use actual; if ≥ 30 min, default to 30 min.
-- All times displayed in decimal format (e.g., 1.5 for 1 hour 30 minutes).
+**Work Time:**
+
+$$
+	ext{Work Time} = \sum_{i=1}^n (\text{Work Stop}_i - \text{Work Start}_i) - \text{Lunch Duration} - \text{Internal Company Time}
+$$
+
+- Work segments are summed from all start/stop pairs for the day.
+- Lunch duration is subtracted if present.
+- Internal company time is subtracted if present.
+- Lunch can be edited or deleted independently.
+  All times displayed in decimal format (e.g., 1.5 for 1 hour 30 minutes).
 
 ### 5.3 Data Flow
 
