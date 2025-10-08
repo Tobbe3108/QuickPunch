@@ -1,5 +1,5 @@
 <script lang="ts">
-	let { record, workDurations, workTime, onWipeDay, fmtTime, onEdit, onDelete } = $props();
+	let { record, workDurations, workTime, fmtTime, onEdit, onDelete } = $props();
 </script>
 
 <div class="mt-6">
@@ -28,5 +28,4 @@
 		{/if}
 		<li>Work Time: {workTime()}</li>
 	</ul>
-	<button class="btn-danger mt-4 w-full" onclick={onWipeDay}>Wipe Todays State</button>
 </div>

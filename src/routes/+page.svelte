@@ -7,6 +7,7 @@
 	import TodayTimes from '$lib/components/TodayTimes.svelte';
 	import Toast from '$lib/components/Toast.svelte';
 	import EditSegmentModal from '$lib/components/EditSegmentModal.svelte';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 
 	const todayKey = 'record-' + format(new Date(), 'yyyy-MM-dd');
 
@@ -104,8 +105,10 @@
 	let editStartStr = $state('');
 	let editEndStr = $state('');
 
-	// Store last deleted segment for undo
-	let lastDeleted = $state<{ index: number; segment: any } | null>(null);
+	// Confirmation dialog state
+	let confirmOpen = $state(false);
+	let confirmMessage = $state('');
+	let confirmDeleteIndex = $state<number | 'lunch' | null>(null);
 
 	function pad(num: number) {
 		return num.toString().padStart(2, '0');
@@ -136,17 +139,32 @@
 	}
 
 	function handleDelete(index: number | 'lunch') {
-		if (index === 'lunch') {
+		confirmDeleteIndex = index;
+		confirmMessage =
+			index === 'lunch'
+				? 'Are you sure you want to delete the lunch record?'
+				: 'Are you sure you want to delete this work segment?';
+		confirmOpen = true;
+	}
+
+	function handleConfirmDelete() {
+		if (confirmDeleteIndex === 'lunch') {
 			if (!record.lunchDuration) return;
-			lastDeleted = { index: 'lunch', segment: { ...record.lunchDuration } };
 			record.lunchDuration = undefined;
-			toast = 'Lunch deleted. Undo?';
-			return;
+			toast = 'Lunch deleted.';
+		} else if (typeof confirmDeleteIndex === 'number' && record.Durations) {
+			record.Durations.splice(confirmDeleteIndex, 1);
+			toast = 'Segment deleted.';
 		}
-		if (!record.Durations) return;
-		lastDeleted = { index, segment: { ...record.Durations[index] } };
-		record.Durations.splice(index, 1);
-		toast = 'Segment deleted. Undo?';
+		confirmOpen = false;
+		confirmDeleteIndex = null;
+		confirmMessage = '';
+	}
+
+	function handleCancelDelete() {
+		confirmOpen = false;
+		confirmDeleteIndex = null;
+		confirmMessage = '';
 	}
 
 	function handleModalSave() {
@@ -213,34 +231,9 @@
 		editEndStr = '';
 	}
 
-	function handleUndoDelete() {
-		if (!lastDeleted) return;
-		if (lastDeleted.index === 'lunch') {
-			record.lunchDuration = lastDeleted.segment;
-			toast = 'Lunch delete undone.';
-			lastDeleted = null;
-			return;
-		}
-		if (record.Durations) {
-			record.Durations.splice(lastDeleted.index, 0, lastDeleted.segment);
-			toast = 'Delete undone.';
-			lastDeleted = null;
-		}
-	}
-
 	function fmtTime(val?: Date) {
 		if (!val) return '';
 		return format(val, 'HH:mm');
-	}
-
-	function handleWipeDay() {
-		record = {
-			date: new Date(),
-			Durations: [],
-			lunchDuration: undefined,
-			internalCompanyTime: undefined
-		};
-		toast = "Today's state wiped";
 	}
 </script>
 
@@ -257,9 +250,13 @@
 	/>
 
 	<Toast {toast} />
-	{#if toast === 'Segment deleted. Undo?'}
-		<button class="btn-xs btn-outline mt-2" onclick={handleUndoDelete}>Undo</button>
-	{/if}
+
+	<ConfirmDialog
+		open={confirmOpen}
+		message={confirmMessage}
+		onConfirm={handleConfirmDelete}
+		onCancel={handleCancelDelete}
+	/>
 
 	<EditSegmentModal
 		open={editModalOpen}
@@ -277,7 +274,6 @@
 		{workTime}
 		onEdit={handleEdit}
 		onDelete={handleDelete}
-		onWipeDay={handleWipeDay}
 		{fmtTime}
 	/>
 </main>
