@@ -6,7 +6,8 @@ QuickPunch is a Svelte 5 SPA for fast, accurate daily work hour tracking. It fea
 
 ## Architecture & Data Flow
 
-- **Frontend:** Svelte 5, organized by views: Main, History, Reporting (see `src/routes/` and `src/lib/`).
+- **Frontend:** Svelte 5 SPA, organized by views (Main, History, Reporting) in `src/routes/` and a dedicated component architecture in `src/lib/components/`.
+  - **Component Architecture:** All reusable UI elements (buttons, toasts, time displays, etc.) are implemented as Svelte components in `src/lib/components/`. Views in `src/routes/` compose these components for page-level logic and layout. Components follow atomic design principles for maintainability and reusability.
 - **State Management:** Svelte stores drive UI state and sync with backend.
 - **Persistence:** All CRUD operations use Cloudflare KV via serverless API endpoints. No local/offline cache.
 - **Authentication:** User token stored locally, sent with all API requests.

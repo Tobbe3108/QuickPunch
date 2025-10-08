@@ -1,8 +1,12 @@
 <script lang="ts">
 	import type { TimeRecord } from '$lib/models/TimeRecord';
-	import { idb } from '$lib/idbService';
+	import { idb } from '$lib/utils/idbService';
 	import { format, differenceInMilliseconds } from 'date-fns';
 	import { onMount } from 'svelte';
+	import ActionButtons from '$lib/components/ActionButtons.svelte';
+	import TodayTimes from '$lib/components/TodayTimes.svelte';
+	import Toast from '$lib/components/Toast.svelte';
+	import EditSegmentModal from '$lib/components/EditSegmentModal.svelte';
 
 	const todayKey = 'record-' + format(new Date(), 'yyyy-MM-dd');
 
@@ -92,15 +96,136 @@
 		toast = 'Lunch ended';
 	}
 
-	function handleEdit(field: keyof TimeRecord) {
-		//TODO: Implement
+	// Modal state for editing
+	let editModalOpen = $state(false);
+	let editIndex = $state<number | null>(null);
+	let editStart = $state<Date | null>(null);
+	let editEnd = $state<Date | null>(null);
+	let editStartStr = $state('');
+	let editEndStr = $state('');
+
+	// Store last deleted segment for undo
+	let lastDeleted = $state<{ index: number; segment: any } | null>(null);
+
+	function pad(num: number) {
+		return num.toString().padStart(2, '0');
+	}
+	function toTimeStr(date: Date | null) {
+		if (!date) return '';
+		return pad(date.getHours()) + ':' + pad(date.getMinutes());
+	}
+	function handleEdit(index: number | 'lunch') {
+		if (index === 'lunch') {
+			if (!record.lunchDuration) return;
+			editIndex = 'lunch';
+			editStart = record.lunchDuration.start;
+			editEnd = record.lunchDuration.end ?? null;
+			editStartStr = toTimeStr(editStart);
+			editEndStr = toTimeStr(editEnd);
+			editModalOpen = true;
+			return;
+		}
+		const dur = record.Durations?.[index];
+		if (!dur) return;
+		editIndex = index;
+		editStart = dur.start;
+		editEnd = dur.end ?? null;
+		editStartStr = toTimeStr(editStart);
+		editEndStr = toTimeStr(editEnd);
+		editModalOpen = true;
 	}
 
-	function handleDelete(field: keyof TimeRecord) {
-		if (field === 'Durations') record.Durations = [];
-		else if (field === 'lunchDuration') record.lunchDuration = undefined;
-		else if (field === 'internalCompanyTime') record.internalCompanyTime = undefined;
-		toast = `${field} deleted.`;
+	function handleDelete(index: number | 'lunch') {
+		if (index === 'lunch') {
+			if (!record.lunchDuration) return;
+			lastDeleted = { index: 'lunch', segment: { ...record.lunchDuration } };
+			record.lunchDuration = undefined;
+			toast = 'Lunch deleted. Undo?';
+			return;
+		}
+		if (!record.Durations) return;
+		lastDeleted = { index, segment: { ...record.Durations[index] } };
+		record.Durations.splice(index, 1);
+		toast = 'Segment deleted. Undo?';
+	}
+
+	function handleModalSave() {
+		const baseDate = record.date;
+		const [sh, sm] = editStartStr.split(':').map(Number);
+		const [eh, em] = editEndStr.split(':').map(Number);
+		if (editIndex === 'lunch') {
+			if (!record.lunchDuration) return;
+			record.lunchDuration.start = new Date(
+				baseDate.getFullYear(),
+				baseDate.getMonth(),
+				baseDate.getDate(),
+				sh,
+				sm
+			);
+			if (!isNaN(eh) && !isNaN(em)) {
+				record.lunchDuration.end = new Date(
+					baseDate.getFullYear(),
+					baseDate.getMonth(),
+					baseDate.getDate(),
+					eh,
+					em
+				);
+			} else {
+				record.lunchDuration.end = undefined;
+			}
+			toast = 'Lunch updated.';
+		} else {
+			if (editIndex === null || !record.Durations) return;
+			record.Durations[editIndex].start = new Date(
+				baseDate.getFullYear(),
+				baseDate.getMonth(),
+				baseDate.getDate(),
+				sh,
+				sm
+			);
+			if (!isNaN(eh) && !isNaN(em)) {
+				record.Durations[editIndex].end = new Date(
+					baseDate.getFullYear(),
+					baseDate.getMonth(),
+					baseDate.getDate(),
+					eh,
+					em
+				);
+			} else {
+				record.Durations[editIndex].end = undefined;
+			}
+			toast = 'Segment updated.';
+		}
+		editModalOpen = false;
+		editIndex = null;
+		editStart = null;
+		editEnd = null;
+		editStartStr = '';
+		editEndStr = '';
+	}
+
+	function handleModalCancel() {
+		editModalOpen = false;
+		editIndex = null;
+		editStart = null;
+		editEnd = null;
+		editStartStr = '';
+		editEndStr = '';
+	}
+
+	function handleUndoDelete() {
+		if (!lastDeleted) return;
+		if (lastDeleted.index === 'lunch') {
+			record.lunchDuration = lastDeleted.segment;
+			toast = 'Lunch delete undone.';
+			lastDeleted = null;
+			return;
+		}
+		if (record.Durations) {
+			record.Durations.splice(lastDeleted.index, 0, lastDeleted.segment);
+			toast = 'Delete undone.';
+			lastDeleted = null;
+		}
 	}
 
 	function fmtTime(val?: Date) {
@@ -123,46 +248,36 @@
 	<h1 class="mb-2 text-xl font-bold">QuickPunch</h1>
 	<div class="mb-4 text-gray-600">{format(record.date, 'PPP')}</div>
 
-	<div class="mb-4 flex flex-col gap-2">
-		{#if availableActions()[0] === 'workStart'}
-			<button class="btn-primary w-full" onclick={handleWorkStart}>Start Work</button>
-		{:else}
-			<button class="btn-warning w-full" onclick={handleWorkStop}>Stop Work</button>
-		{/if}
-		{#if availableActions().includes('lunchStart')}
-			<button class="btn-primary w-full" onclick={handleLunchStart}>Start Lunch</button>
-		{/if}
-		{#if availableActions().includes('lunchEnd')}
-			<button class="btn-primary w-full" onclick={handleLunchEnd}>End Lunch</button>
-		{/if}
-	</div>
+	<ActionButtons
+		{availableActions}
+		onWorkStart={handleWorkStart}
+		onWorkStop={handleWorkStop}
+		onLunchStart={handleLunchStart}
+		onLunchEnd={handleLunchEnd}
+	/>
 
-	{#if toast}
-		<div class="mt-2 text-green-600">{toast}</div>
+	<Toast {toast} />
+	{#if toast === 'Segment deleted. Undo?'}
+		<button class="btn-xs btn-outline mt-2" onclick={handleUndoDelete}>Undo</button>
 	{/if}
 
-	<div class="mt-6">
-		<h2 class="mb-2 font-semibold">Today’s Times</h2>
-		<ul class="space-y-1">
-			{#each workDurations() as dur, i}
-				<li>
-					Work {i + 1}: {fmtTime(dur.start)} - {fmtTime(dur.end)}
-					{#if !dur.end}
-						<span class="ml-2 text-yellow-600">(Active)</span>
-					{/if}
-				</li>
-			{/each}
-			<li>
-				Lunch: {fmtTime(record.lunchDuration?.start)} - {fmtTime(record.lunchDuration?.end)}
-				<button class="ml-2 text-xs text-blue-600" onclick={() => handleEdit('lunchDuration')}
-					>Edit</button
-				>
-				<button class="ml-1 text-xs text-red-600" onclick={() => handleDelete('lunchDuration')}
-					>Delete</button
-				>
-			</li>
-			<li>Work Time: {workTime()}</li>
-		</ul>
-		<button class="btn-danger mt-4 w-full" onclick={handleWipeDay}>Wipe Today’s State</button>
-	</div>
+	<EditSegmentModal
+		open={editModalOpen}
+		startStr={editStartStr}
+		endStr={editEndStr}
+		setStartStr={(val: string) => (editStartStr = val)}
+		setEndStr={(val: string) => (editEndStr = val)}
+		onSave={handleModalSave}
+		onCancel={handleModalCancel}
+	/>
+
+	<TodayTimes
+		{record}
+		{workDurations}
+		{workTime}
+		onEdit={handleEdit}
+		onDelete={handleDelete}
+		onWipeDay={handleWipeDay}
+		{fmtTime}
+	/>
 </main>
