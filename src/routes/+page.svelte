@@ -212,16 +212,6 @@
 		if (!val) return '';
 		return format(val, 'HH:mm');
 	}
-
-	function handleWipeDay() {
-		record = {
-			date: new Date(),
-			Durations: [],
-			lunchDuration: undefined,
-			internalCompanyTime: undefined
-		};
-		toast = "Today's state wiped";
-	}
 </script>
 
 <main class="mx-auto mt-8 max-w-md rounded bg-white p-4 shadow">
@@ -254,7 +244,6 @@
 		{workTime}
 		onEdit={handleEdit}
 		onDelete={handleDelete}
-		onWipeDay={handleWipeDay}
 		{fmtTime}
 	/>
 </main>
