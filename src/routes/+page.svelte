@@ -104,9 +104,6 @@
 	let editStartStr = $state('');
 	let editEndStr = $state('');
 
-	// Store last deleted segment for undo
-	let lastDeleted = $state<{ index: number; segment: any } | null>(null);
-
 	function pad(num: number) {
 		return num.toString().padStart(2, '0');
 	}
@@ -138,15 +135,13 @@
 	function handleDelete(index: number | 'lunch') {
 		if (index === 'lunch') {
 			if (!record.lunchDuration) return;
-			lastDeleted = { index: 'lunch', segment: { ...record.lunchDuration } };
 			record.lunchDuration = undefined;
-			toast = 'Lunch deleted. Undo?';
+			toast = 'Lunch deleted.';
 			return;
 		}
 		if (!record.Durations) return;
-		lastDeleted = { index, segment: { ...record.Durations[index] } };
 		record.Durations.splice(index, 1);
-		toast = 'Segment deleted. Undo?';
+		toast = 'Segment deleted.';
 	}
 
 	function handleModalSave() {
@@ -213,21 +208,6 @@
 		editEndStr = '';
 	}
 
-	function handleUndoDelete() {
-		if (!lastDeleted) return;
-		if (lastDeleted.index === 'lunch') {
-			record.lunchDuration = lastDeleted.segment;
-			toast = 'Lunch delete undone.';
-			lastDeleted = null;
-			return;
-		}
-		if (record.Durations) {
-			record.Durations.splice(lastDeleted.index, 0, lastDeleted.segment);
-			toast = 'Delete undone.';
-			lastDeleted = null;
-		}
-	}
-
 	function fmtTime(val?: Date) {
 		if (!val) return '';
 		return format(val, 'HH:mm');
@@ -257,9 +237,6 @@
 	/>
 
 	<Toast {toast} />
-	{#if toast === 'Segment deleted. Undo?'}
-		<button class="btn-xs btn-outline mt-2" onclick={handleUndoDelete}>Undo</button>
-	{/if}
 
 	<EditSegmentModal
 		open={editModalOpen}
