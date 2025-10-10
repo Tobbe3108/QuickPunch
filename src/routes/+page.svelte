@@ -6,8 +6,9 @@
 	import ActionButtons from '$lib/components/ActionButtons.svelte';
 	import TodayTimes from '$lib/components/TodayTimes.svelte';
 	import Toast from '$lib/components/Toast.svelte';
-	import EditSegmentModal from '$lib/components/EditSegmentModal.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import EditDurationsModal from '$lib/components/EditDurationsModal.svelte';
+	import EditLunchModal from '$lib/components/EditLunchModal.svelte';
 
 	let record = $state<Keyed<TimeRecord>>({
 		key: format(new Date(), 'yyyy-MM-dd'),
@@ -94,13 +95,11 @@
 		toast = 'Lunch ended';
 	}
 
-	// Modal state for editing
-	let editModalOpen = $state(false);
-	let editIndex = $state<number | 'lunch' | null>(null);
-	let editStart = $state<Date | null>(null);
-	let editEnd = $state<Date | null>(null);
-	let editStartStr = $state('');
-	let editEndStr = $state('');
+	// Modal state for editing (use new modals)
+	let modalOpen = $state(false);
+	let modalDurationsOpen = $state(false);
+	let modalLunchOpen = $state(false);
+	let modalIdx = $state<number | null>(null);
 
 	// Confirmation dialog state
 	let confirmOpen = $state(false);
@@ -117,24 +116,28 @@
 	}
 
 	function handleEdit(index: number | 'lunch') {
+		// Support -1 as the sentinel to open the shared durations editor for all durations
+		if (index === -1) {
+			modalOpen = true;
+			modalDurationsOpen = true;
+			modalLunchOpen = false;
+			modalIdx = null;
+			return;
+		}
 		if (index === 'lunch') {
 			if (!record.lunchDuration) return;
-			editIndex = 'lunch';
-			editStart = record.lunchDuration.start;
-			editEnd = record.lunchDuration.end ?? null;
-			editStartStr = toTimeStr(editStart);
-			editEndStr = toTimeStr(editEnd);
-			editModalOpen = true;
+			modalOpen = true;
+			modalLunchOpen = true;
+			modalDurationsOpen = false;
+			modalIdx = null;
 			return;
 		}
 		const dur = record.Durations?.[index];
 		if (!dur) return;
-		editIndex = index;
-		editStart = dur.start;
-		editEnd = dur.end ?? null;
-		editStartStr = toTimeStr(editStart);
-		editEndStr = toTimeStr(editEnd);
-		editModalOpen = true;
+		modalOpen = true;
+		modalDurationsOpen = true;
+		modalLunchOpen = false;
+		modalIdx = index;
 	}
 
 	function handleDelete(index: number | 'lunch') {
@@ -166,12 +169,13 @@
 		confirmMessage = '';
 	}
 
-	function handleModalSave() {
+	function handleModalSave(payload?: any) {
+		if (!payload || !payload.record) return;
 		const baseDate = record.date;
-		const [sh, sm] = editStartStr.split(':').map(Number);
-		const [eh, em] = editEndStr.split(':').map(Number);
-		if (editIndex === 'lunch') {
-			if (!record.lunchDuration) return;
+		if (payload.mode === 'lunch') {
+			const [sh, sm] = (payload.startStr ?? '').split(':').map(Number);
+			const [eh, em] = (payload.endStr ?? '').split(':').map(Number);
+			if (!record.lunchDuration) record.lunchDuration = { start: new Date(baseDate) };
 			record.lunchDuration.start = new Date(
 				baseDate.getFullYear(),
 				baseDate.getMonth(),
@@ -191,9 +195,12 @@
 				record.lunchDuration.end = undefined;
 			}
 			toast = 'Lunch updated.';
-		} else {
-			if (editIndex === null || !record.Durations) return;
-			record.Durations[editIndex].start = new Date(
+		} else if (payload.mode === 'duration') {
+			const idx = payload.durationIndex;
+			if (typeof idx !== 'number' || !record.Durations) return;
+			const [sh, sm] = (payload.startStr ?? '').split(':').map(Number);
+			const [eh, em] = (payload.endStr ?? '').split(':').map(Number);
+			record.Durations[idx].start = new Date(
 				baseDate.getFullYear(),
 				baseDate.getMonth(),
 				baseDate.getDate(),
@@ -201,7 +208,7 @@
 				sm
 			);
 			if (!isNaN(eh) && !isNaN(em)) {
-				record.Durations[editIndex].end = new Date(
+				record.Durations[idx].end = new Date(
 					baseDate.getFullYear(),
 					baseDate.getMonth(),
 					baseDate.getDate(),
@@ -209,25 +216,48 @@
 					em
 				);
 			} else {
-				record.Durations[editIndex].end = undefined;
+				record.Durations[idx].end = undefined;
 			}
 			toast = 'Segment updated.';
+		} else if (payload.mode === 'durations' && Array.isArray(payload.durations)) {
+			// replace all durations
+			record.Durations = payload.durations.map((d: any) => {
+				const [sh, sm] = (d.startStr ?? '').split(':').map(Number);
+				const [eh, em] = (d.endStr ?? '').split(':').map(Number);
+				let start: Date | undefined = undefined;
+				let end: Date | undefined = undefined;
+				if (!isNaN(sh) && !isNaN(sm))
+					start = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), sh, sm);
+				if (!isNaN(eh) && !isNaN(em))
+					end = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), eh, em);
+				return { start, end };
+			});
+			toast = 'Durations updated.';
 		}
-		editModalOpen = false;
-		editIndex = null;
-		editStart = null;
-		editEnd = null;
-		editStartStr = '';
-		editEndStr = '';
+		// close modals
+		modalOpen = false;
+		modalDurationsOpen = false;
+		modalLunchOpen = false;
+		modalIdx = null;
 	}
 
 	function handleModalCancel() {
-		editModalOpen = false;
-		editIndex = null;
-		editStart = null;
-		editEnd = null;
-		editStartStr = '';
-		editEndStr = '';
+		modalOpen = false;
+		modalDurationsOpen = false;
+		modalLunchOpen = false;
+		modalIdx = null;
+	}
+
+	function handleModalDelete(recordToDel?: any) {
+		if (!recordToDel) return;
+		// remove lunch
+		record.lunchDuration = undefined;
+		toast = 'Lunch deleted.';
+		// close modal
+		modalOpen = false;
+		modalDurationsOpen = false;
+		modalLunchOpen = false;
+		modalIdx = null;
 	}
 
 	function fmtTime(val?: Date) {
@@ -257,15 +287,24 @@
 		onCancel={handleCancelDelete}
 	/>
 
-	<EditSegmentModal
-		open={editModalOpen}
-		startStr={editStartStr}
-		endStr={editEndStr}
-		setStartStr={(val: string) => (editStartStr = val)}
-		setEndStr={(val: string) => (editEndStr = val)}
-		onSave={handleModalSave}
-		onCancel={handleModalCancel}
-	/>
+	{#if modalDurationsOpen}
+		<EditDurationsModal
+			open={modalOpen}
+			{record}
+			durationIndex={modalIdx}
+			onSave={handleModalSave}
+			onCancel={handleModalCancel}
+		/>
+	{/if}
+	{#if modalLunchOpen}
+		<EditLunchModal
+			open={modalOpen}
+			{record}
+			onSave={handleModalSave}
+			onCancel={handleModalCancel}
+			onDelete={handleModalDelete}
+		/>
+	{/if}
 
 	<a
 		href="/history"

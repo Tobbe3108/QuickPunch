@@ -2,10 +2,13 @@
 	import type { Keyed } from './../utils/KeyValueService.ts';
 	import { onMount } from 'svelte';
 	import { idb } from '../utils/KeyValueService';
-	import type { TimeRecord } from '../models/TimeRecord';
-	import { format, isValid, compareDesc, isSameDay } from 'date-fns';
+	import type { TimeRecord, Duration } from '../models/TimeRecord';
+	import { compareDesc, isSameDay } from 'date-fns';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import HistoryRow from './HistoryRow.svelte';
+	import EditDurationsModal from './EditDurationsModal.svelte';
+	import EditLunchModal from './EditLunchModal.svelte';
+	import EditInternalModal from './EditInternalModal.svelte';
 
 	let confirmDialogOpen = false;
 	let deleteRecord: Keyed<TimeRecord> | null = null;
@@ -14,26 +17,30 @@
 	let loading = true;
 	let error: string | null = null;
 
-	// Inline editing state
-	let editingRecordId: string | null = null;
-	let editingType: 'duration' | 'lunch' | 'internal' | null = null;
-	let editingIndex: number | null = null; // For duration index
-	let editStartStr = '';
-	let editEndStr = '';
-	let editInternalStr = '';
-	function handleEditInternal(record: Keyed<TimeRecord>) {
-		editingRecordId = record.key;
-		editingType = 'internal';
-		editingIndex = null;
-		// Format internalCompanyTime as HH:mm (milliseconds)
-		if (typeof record.internalCompanyTime === 'number') {
-			const totalMinutes = Math.floor(record.internalCompanyTime / 60000);
-			const h = Math.floor(totalMinutes / 60);
-			const m = totalMinutes % 60;
-			editInternalStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-		} else {
-			editInternalStr = '';
-		}
+	// Modal state
+	let modalOpen = false;
+	let modalRecord: Keyed<TimeRecord> | null = null;
+	// Replace modalMode with explicit modal type flags for clarity
+	let modalDurationsOpen = false; // used for both single-duration and all-durations
+	let modalLunchOpen = false;
+	let modalInternalOpen = false;
+	let modalIdx: number | null = null; // duration index when editing a single duration
+
+	function openEditModal(
+		record: Keyed<TimeRecord>,
+		mode: 'duration' | 'lunch' | 'internal',
+		idx?: number | null
+	) {
+		modalRecord = record;
+		modalIdx = idx ?? null;
+		// Reset all flags then set the requested one
+		modalDurationsOpen = false;
+		modalLunchOpen = false;
+		modalInternalOpen = false;
+		if (mode === 'duration') modalDurationsOpen = true;
+		else if (mode === 'lunch') modalLunchOpen = true;
+		else if (mode === 'internal') modalInternalOpen = true;
+		modalOpen = true;
 	}
 
 	onMount(async () => {
@@ -55,75 +62,84 @@
 		}
 	});
 
-	function formatTime(date: Date | undefined): string {
-		if (!date) return '';
-		if (!isValid(date)) return '';
-		return format(date, 'HH:mm');
-	}
-
-	function handleEditDuration(record: Keyed<TimeRecord>, idx: number) {
-		editingRecordId = record.key;
-		editingType = 'duration';
-		editingIndex = idx;
-		editStartStr = formatTime(record.Durations?.[idx]?.start);
-		editEndStr = formatTime(record.Durations?.[idx]?.end);
-	}
-
-	function handleEditLunch(record: Keyed<TimeRecord>) {
-		editingRecordId = record.key;
-		editingType = 'lunch';
-		editingIndex = null;
-		editStartStr = formatTime(record.lunchDuration?.start);
-		editEndStr = formatTime(record.lunchDuration?.end);
-	}
-
-	async function handleEditSave(record: Keyed<TimeRecord>) {
-		if (!editingType) return;
+	async function handleModalSave(payload: {
+		record: Keyed<TimeRecord>;
+		mode: string;
+		durationIndex?: number | null;
+		startStr?: string;
+		endStr?: string;
+		internalStr?: string;
+		durations?: Array<{ startStr: string; endStr: string }>;
+	}) {
+		if (!payload || !payload.record) return;
+		const record = payload.record;
 		try {
 			if (
-				editingType === 'duration' &&
-				editingIndex !== null &&
-				record.Durations &&
-				record.Durations[editingIndex]
+				payload.mode === 'duration' &&
+				typeof payload.durationIndex === 'number' &&
+				record.Durations
 			) {
-				const [sh, sm] = editStartStr.split(':').map(Number);
-				const [eh, em] = editEndStr.split(':').map(Number);
-				if (!isNaN(sh) && !isNaN(sm) && !isNaN(eh) && !isNaN(em)) {
+				const idx = payload.durationIndex;
+				const [sh, sm] = (payload.startStr ?? '').split(':').map(Number);
+				const [eh, em] = (payload.endStr ?? '').split(':').map(Number);
+				if (!isNaN(sh) && !isNaN(sm)) {
 					const start = new Date(record.date);
 					start.setHours(sh, sm, 0, 0);
-					const end = new Date(record.date);
-					end.setHours(eh, em, 0, 0);
-					// Defensive: clone durations array to trigger reactivity
+					let end: Date | undefined = undefined;
+					if (!isNaN(eh) && !isNaN(em)) {
+						end = new Date(record.date);
+						end.setHours(eh, em, 0, 0);
+					}
 					const newDurations = record.Durations.map((d, i) =>
-						i === editingIndex ? { ...d, start, end } : d
+						i === idx ? { ...d, start, end } : d
 					);
 					record.Durations = newDurations;
 				}
-			} else if (editingType === 'lunch') {
-				const [sh, sm] = editStartStr.split(':').map(Number);
-				const [eh, em] = editEndStr.split(':').map(Number);
-				if (!isNaN(sh) && !isNaN(sm) && !isNaN(eh) && !isNaN(em)) {
+			} else if (payload.mode === 'lunch') {
+				const [sh, sm] = (payload.startStr ?? '').split(':').map(Number);
+				const [eh, em] = (payload.endStr ?? '').split(':').map(Number);
+				if (!isNaN(sh) && !isNaN(sm)) {
 					const start = new Date(record.date);
 					start.setHours(sh, sm, 0, 0);
-					const end = new Date(record.date);
-					end.setHours(eh, em, 0, 0);
+					let end: Date | undefined = undefined;
+					if (!isNaN(eh) && !isNaN(em)) {
+						end = new Date(record.date);
+						end.setHours(eh, em, 0, 0);
+					}
 					record.lunchDuration = { start, end };
 				}
-			} else if (editingType === 'internal') {
-				// Accept decimal hours, e.g. "1,5" or "2.25"
-				let val = editInternalStr.trim();
+			} else if (payload.mode === 'internal') {
+				let val = (payload.internalStr ?? '').trim();
 				if (!val) {
 					record.internalCompanyTime = 0;
 				} else {
 					val = val.replace(',', '.');
 					let hours = parseFloat(val);
 					if (!isNaN(hours)) {
-						// Convert decimal hours to milliseconds
 						record.internalCompanyTime = Math.round(hours * 3600000);
 					} else {
 						record.internalCompanyTime = 0;
 					}
 				}
+			} else if (payload.mode === 'durations' && Array.isArray(payload.durations)) {
+				// Map incoming start/end strings to Dates and set record.Durations
+				const newDurations = payload.durations
+					.map((d) => {
+						const [sh, sm] = (d.startStr ?? '').split(':').map(Number);
+						const [eh, em] = (d.endStr ?? '').split(':').map(Number);
+						if (isNaN(sh) || isNaN(sm)) return null;
+						const start = new Date(record.date);
+						start.setHours(sh, sm, 0, 0);
+						let end: Date | undefined = undefined;
+						if (!isNaN(eh) && !isNaN(em)) {
+							end = new Date(record.date);
+							end.setHours(eh, em, 0, 0);
+						}
+						return { start, end };
+					})
+					.filter(Boolean) as Duration[];
+
+				record.Durations = newDurations;
 			}
 			await idb.set(record);
 			records = records.map((r) => (r.key === record.key ? { ...record } : r));
@@ -131,12 +147,62 @@
 		} catch (e) {
 			error = 'Failed to update record.';
 		}
-		editingRecordId = null;
-		editingType = null;
-		editingIndex = null;
-		editStartStr = '';
-		editEndStr = '';
-		editInternalStr = '';
+		// close modal and reset flags
+		modalOpen = false;
+		modalRecord = null;
+		modalDurationsOpen = false;
+		modalLunchOpen = false;
+		modalInternalOpen = false;
+		modalIdx = null;
+	}
+
+	function handleModalCancel() {
+		modalOpen = false;
+		modalRecord = null;
+		modalDurationsOpen = false;
+		modalLunchOpen = false;
+		modalInternalOpen = false;
+		modalIdx = null;
+	}
+
+	async function handleModalDelete(recordToDel: Keyed<TimeRecord> | null) {
+		if (!recordToDel) return;
+		try {
+			// clear lunch on the record and persist
+			recordToDel.lunchDuration = undefined;
+			await idb.set(recordToDel);
+			records = records.map((r) => (r.key === recordToDel.key ? { ...recordToDel } : r));
+			error = null;
+		} catch (e) {
+			error = 'Failed to delete lunch.';
+		}
+		// close modal
+		modalOpen = false;
+		modalRecord = null;
+		modalDurationsOpen = false;
+		modalLunchOpen = false;
+		modalInternalOpen = false;
+		modalIdx = null;
+	}
+
+	async function handleModalDeleteInternal(recordToDel: Keyed<TimeRecord> | null) {
+		if (!recordToDel) return;
+		try {
+			// clear internalCompanyTime on the record and persist
+			recordToDel.internalCompanyTime = undefined;
+			await idb.set(recordToDel);
+			records = records.map((r) => (r.key === recordToDel.key ? { ...recordToDel } : r));
+			error = null;
+		} catch (e) {
+			error = 'Failed to delete internal time.';
+		}
+		// close modal
+		modalOpen = false;
+		modalRecord = null;
+		modalDurationsOpen = false;
+		modalLunchOpen = false;
+		modalInternalOpen = false;
+		modalIdx = null;
 	}
 
 	function handleDelete(record: Keyed<TimeRecord>) {
@@ -170,37 +236,43 @@
 						<th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Durations</th>
 						<th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Lunch</th>
 						<th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Internal</th>
-						<th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Work</th>
 						<th class="px-4 py-2"></th>
 					</tr>
 				</thead>
 				<tbody>
 					{#each records as record}
-						<HistoryRow
-							{record}
-							{editingRecordId}
-							{editingType}
-							{editingIndex}
-							bind:editStartStr
-							bind:editEndStr
-							bind:editInternalStr
-							onEditDuration={handleEditDuration}
-							onEditLunch={handleEditLunch}
-							onEditInternal={handleEditInternal}
-							onEditSave={handleEditSave}
-							onDelete={handleDelete}
-							onEditCancel={() => {
-								editingRecordId = null;
-								editingType = null;
-								editingIndex = null;
-								editStartStr = '';
-								editEndStr = '';
-								editInternalStr = '';
-							}}
-						/>
+						<HistoryRow {record} onOpenEdit={openEditModal} onDelete={handleDelete} />
 					{/each}
 				</tbody>
 			</table>
+			{#if modalDurationsOpen}
+				<!-- If modalIdx is set we edit a single duration, otherwise edit all durations -->
+				<EditDurationsModal
+					open={modalOpen}
+					record={modalRecord}
+					durationIndex={modalIdx}
+					onSave={handleModalSave}
+					onCancel={handleModalCancel}
+				/>
+			{/if}
+			{#if modalLunchOpen}
+				<EditLunchModal
+					open={modalOpen}
+					record={modalRecord}
+					onSave={handleModalSave}
+					onCancel={handleModalCancel}
+					onDelete={handleModalDelete}
+				/>
+			{/if}
+			{#if modalInternalOpen}
+				<EditInternalModal
+					open={modalOpen}
+					record={modalRecord}
+					onSave={handleModalSave}
+					onCancel={handleModalCancel}
+					onDelete={handleModalDeleteInternal}
+				/>
+			{/if}
 			<ConfirmDialog
 				open={confirmDialogOpen}
 				message="Are you sure you want to delete this record? This action cannot be undone."
