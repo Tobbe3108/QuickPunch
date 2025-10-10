@@ -96,7 +96,7 @@
 
 	// Modal state for editing
 	let editModalOpen = $state(false);
-	let editIndex = $state<number | null>(null);
+	let editIndex = $state<number | 'lunch' | null>(null);
 	let editStart = $state<Date | null>(null);
 	let editEnd = $state<Date | null>(null);
 	let editStartStr = $state('');
