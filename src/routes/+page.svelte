@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { TimeRecord } from '$lib/models/TimeRecord';
-	import { idb } from '$lib/utils/idbService';
+	import { idb, type Keyed } from '$lib/utils/KeyValueService';
 	import { format, differenceInMilliseconds } from 'date-fns';
 	import { onMount } from 'svelte';
 	import ActionButtons from '$lib/components/ActionButtons.svelte';
@@ -9,22 +9,21 @@
 	import EditSegmentModal from '$lib/components/EditSegmentModal.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 
-	const todayKey = 'record-' + format(new Date(), 'yyyy-MM-dd');
-
-	let record = $state<TimeRecord>({
+	let record = $state<Keyed<TimeRecord>>({
+		key: format(new Date(), 'yyyy-MM-dd'),
 		date: new Date(),
 		Durations: []
 	});
 	let toast = $state('');
 
 	onMount(() => {
-		idb.get<TimeRecord>(todayKey).then((value) => {
+		idb.get<TimeRecord>(record.key).then((value) => {
 			if (value) record = value;
 		});
 	});
 
 	$effect(() => {
-		idb.set<TimeRecord>(todayKey, $state.snapshot(record));
+		idb.set<TimeRecord>($state.snapshot(record));
 	});
 
 	const workDurations = $derived(() => record.Durations ?? []);
@@ -50,12 +49,10 @@
 			);
 		}
 
-		let internalMilliseconds = 0;
-		if (record.internalCompanyTime) {
-			internalMilliseconds = record.internalCompanyTime.getTime();
+		let workTimeMilliseconds = totalMilliseconds - lunchMilliseconds;
+		if (workTimeMilliseconds <= 0) {
+			return '00:00';
 		}
-
-		let workTimeMilliseconds = totalMilliseconds - lunchMilliseconds + internalMilliseconds;
 		const resultDate = new Date(new Date(0, 0, 0, 0, 0, 0, 0).getTime() + workTimeMilliseconds);
 		return format(resultDate, 'HH:mm');
 	});
@@ -113,10 +110,12 @@
 	function pad(num: number) {
 		return num.toString().padStart(2, '0');
 	}
+
 	function toTimeStr(date: Date | null) {
 		if (!date) return '';
 		return pad(date.getHours()) + ':' + pad(date.getMinutes());
 	}
+
 	function handleEdit(index: number | 'lunch') {
 		if (index === 'lunch') {
 			if (!record.lunchDuration) return;
@@ -267,6 +266,12 @@
 		onSave={handleModalSave}
 		onCancel={handleModalCancel}
 	/>
+
+	<a
+		href="/history"
+		class="mt-6 block w-full rounded bg-blue-600 py-2 text-center font-semibold text-white shadow transition hover:bg-blue-700 focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:outline-none"
+		>View History</a
+	>
 
 	<TodayTimes
 		{record}
