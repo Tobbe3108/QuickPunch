@@ -39,13 +39,54 @@
 		}
 	});
 
+	/**
+	 * Parse user input into a decimal hours string (dot as decimal separator).
+	 * Accepts:
+	 * - HH:MM (e.g. "10:55")
+	 * - messy decimals like "1./,25" -> "1.25"
+	 * - normal decimal with "," or "."
+	 * Returns normalized string (e.g. "1.25") or null if invalid.
+	 */
+	function parseToDecimalHoursString(input?: string): string | null {
+		if (!input) return '';
+		const raw = input.trim();
+		if (raw === '') return '';
+
+		// Try HH:MM first
+		const hm = raw.match(/^\s*(\d{1,2}):?(\d{1,2})\s*$/);
+		if (hm) {
+			const hours = Number(hm[1]);
+			const minutes = Number(hm[2]);
+			if (Number.isNaN(hours) || Number.isNaN(minutes) || minutes < 0 || minutes >= 60) return null;
+			const decimal = hours + minutes / 60;
+			// keep up to 4 decimal places to be safe
+			return String(Number(decimal.toFixed(4))).replace(',', '.');
+		}
+
+		// Otherwise sanitize messy decimal input: keep digits, dot and comma
+		let sanitized = raw.replace(/[^0-9.,]/g, '');
+		if (!sanitized) return null;
+		// Replace comma with dot
+		sanitized = sanitized.replace(/,/g, '.');
+		// Collapse multiple dots to a single dot (keep the first)
+		const firstDot = sanitized.indexOf('.');
+		if (firstDot !== -1) {
+			sanitized =
+				sanitized.slice(0, firstDot + 1) + sanitized.slice(firstDot + 1).replace(/\./g, '');
+		}
+
+		// Parse float
+		const value = parseFloat(sanitized);
+		if (Number.isNaN(value)) return null;
+		return String(value).replace(',', '.');
+	}
+
 	function validate() {
 		error = '';
 		if (!internalStr) return true;
-		const v = internalStr.trim().replace(',', '.');
-		const hours = parseFloat(v);
-		if (isNaN(hours)) {
-			error = 'Invalid format.';
+		const parsed = parseToDecimalHoursString(internalStr);
+		if (parsed === null) {
+			error = 'Invalid format. Use HH:MM or decimal hours (e.g. 1.25 or 1,25).';
 			return false;
 		}
 		return true;
@@ -54,7 +95,11 @@
 	function handleSave() {
 		if (!record) return;
 		if (!validate()) return;
-		onSave?.({ record, mode: 'internal', internalStr });
+		// Convert to normalized decimal hours string before saving so
+		// historyMutations.normaliseHours can safely parse it.
+		const parsed = parseToDecimalHoursString(internalStr);
+		if (parsed === null) return; // validate should have caught this
+		onSave?.({ record, mode: 'internal', internalStr: parsed });
 	}
 </script>
 
