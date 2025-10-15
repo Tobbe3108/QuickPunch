@@ -1,5 +1,12 @@
 <script lang="ts">
 	let { record, workDurations, workTime, fmtTime, onEdit, onDelete } = $props();
+
+	const hasDurations = $derived(workDurations().length > 0);
+	const lunchLabel = $derived(
+		record.lunchDuration
+			? `${fmtTime(record.lunchDuration.start)} - ${fmtTime(record.lunchDuration.end)}`
+			: ''
+	);
 </script>
 
 <div class="mt-6">
@@ -13,7 +20,7 @@
 				{/if}
 			</li>
 		{/each}
-		{#if workDurations().length}
+		{#if hasDurations}
 			<li>
 				<button
 					class="mt-2 rounded border border-blue-200 bg-blue-50 px-3 py-1 text-sm text-blue-600 hover:bg-blue-100 focus:ring-2 focus:ring-blue-400 focus:outline-none"
@@ -23,13 +30,9 @@
 				</button>
 			</li>
 		{/if}
-		{#if record.lunchDuration}
+		{#if lunchLabel}
 			<li class="flex items-center gap-2">
-				<span
-					>Lunch: {fmtTime(record.lunchDuration?.start)} - {fmtTime(
-						record.lunchDuration?.end
-					)}</span
-				>
+				<span>Lunch: {lunchLabel}</span>
 				<button
 					class="ml-2 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-600 hover:bg-blue-100 focus:ring-2 focus:ring-blue-400 focus:outline-none"
 					onclick={() => onEdit('lunch')}>Edit</button

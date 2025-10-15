@@ -2,220 +2,194 @@
 	import type { Keyed } from './../utils/KeyValueService.ts';
 	import { onMount } from 'svelte';
 	import { idb } from '../utils/KeyValueService';
-	import type { TimeRecord, Duration } from '../models/TimeRecord';
-	import { compareDesc, isSameDay } from 'date-fns';
+	import type { TimeRecord } from '../models/TimeRecord';
+	import { compareDesc } from 'date-fns';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import HistoryRow from './HistoryRow.svelte';
 	import EditDurationsModal from './EditDurationsModal.svelte';
 	import EditLunchModal from './EditLunchModal.svelte';
 	import EditInternalModal from './EditInternalModal.svelte';
+	import {
+		replaceDurations,
+		updateInternal,
+		updateLunch,
+		updateSingleDuration
+	} from '../utils/historyMutations.js';
 
-	let confirmDialogOpen = false;
-	let deleteRecord: Keyed<TimeRecord> | null = null;
+	type ModalState =
+		| { kind: 'none' }
+		| { kind: 'durations'; record: Keyed<TimeRecord>; index: number | null }
+		| { kind: 'lunch'; record: Keyed<TimeRecord> }
+		| { kind: 'internal'; record: Keyed<TimeRecord> };
 
-	let records: Keyed<TimeRecord>[] = [];
-	let loading = true;
-	let error: string | null = null;
+	type ConfirmState = { open: false } | { open: true; record: Keyed<TimeRecord> };
 
-	// Modal state
-	let modalOpen = false;
-	let modalRecord: Keyed<TimeRecord> | null = null;
-	// Replace modalMode with explicit modal type flags for clarity
-	let modalDurationsOpen = false; // used for both single-duration and all-durations
-	let modalLunchOpen = false;
-	let modalInternalOpen = false;
-	let modalIdx: number | null = null; // duration index when editing a single duration
+	let records = $state([] as Array<Keyed<TimeRecord>>);
+	let loading = $state(true);
+	let error = $state<string | null>(null);
 
-	function openEditModal(
-		record: Keyed<TimeRecord>,
-		mode: 'duration' | 'lunch' | 'internal',
-		idx?: number | null
-	) {
-		modalRecord = record;
-		modalIdx = idx ?? null;
-		// Reset all flags then set the requested one
-		modalDurationsOpen = false;
-		modalLunchOpen = false;
-		modalInternalOpen = false;
-		if (mode === 'duration') modalDurationsOpen = true;
-		else if (mode === 'lunch') modalLunchOpen = true;
-		else if (mode === 'internal') modalInternalOpen = true;
-		modalOpen = true;
-	}
+	let modalState = $state<ModalState>({ kind: 'none' });
+	const isModalOpen = $derived(() => modalState.kind !== 'none');
+	const showDurationsModal = $derived(() => modalState.kind === 'durations');
+	const showLunchModal = $derived(() => modalState.kind === 'lunch');
+	const showInternalModal = $derived(() => modalState.kind === 'internal');
+	const modalRecord = $derived(() => (modalState.kind === 'none' ? null : modalState.record));
+	const modalDurationIndex = $derived(() =>
+		modalState.kind === 'durations' ? modalState.index : null
+	);
+
+	let confirmState = $state<ConfirmState>({ open: false });
+	const confirmOpen = $derived(() => confirmState.open);
 
 	onMount(async () => {
+		await loadRecords();
+	});
+
+	async function loadRecords() {
 		loading = true;
 		try {
-			// Fetch all keys and get records
 			const keys = await idb.keys();
-			const fetchedRecords: Keyed<TimeRecord>[] = [];
-			for (const key of keys) {
-				const rec = await idb.get<TimeRecord>(key as string);
-				if (rec) fetchedRecords.push(rec);
-			}
-			records = fetchedRecords.sort((a, b) => compareDesc(a.date, b.date));
+			const fetched = await Promise.all(keys.map((key) => idb.get<TimeRecord>(String(key))));
+			records = fetched
+				.filter((record): record is Keyed<TimeRecord> => Boolean(record))
+				.sort((a, b) => compareDesc(a.date, b.date));
 			error = null;
 		} catch (e) {
 			error = 'Failed to load history.';
 		} finally {
 			loading = false;
 		}
-	});
+	}
+
+	function openEditModal(
+		record: Keyed<TimeRecord>,
+		mode: 'duration' | 'lunch' | 'internal',
+		index: number | null = null
+	) {
+		if (mode === 'duration') {
+			modalState = { kind: 'durations', record, index };
+		} else if (mode === 'lunch') {
+			modalState = { kind: 'lunch', record };
+		} else {
+			modalState = { kind: 'internal', record };
+		}
+	}
+
+	function closeModal() {
+		modalState = { kind: 'none' };
+	}
 
 	async function handleModalSave(payload: {
 		record: Keyed<TimeRecord>;
-		mode: string;
+		mode: 'duration' | 'durations' | 'lunch' | 'internal';
 		durationIndex?: number | null;
 		startStr?: string;
 		endStr?: string;
 		internalStr?: string;
 		durations?: Array<{ startStr: string; endStr: string }>;
 	}) {
-		if (!payload || !payload.record) return;
-		const record = payload.record;
+		if (!payload?.record) return;
 		try {
-			if (
-				payload.mode === 'duration' &&
-				typeof payload.durationIndex === 'number' &&
-				record.Durations
-			) {
-				const idx = payload.durationIndex;
-				const [sh, sm] = (payload.startStr ?? '').split(':').map(Number);
-				const [eh, em] = (payload.endStr ?? '').split(':').map(Number);
-				if (!isNaN(sh) && !isNaN(sm)) {
-					const start = new Date(record.date);
-					start.setHours(sh, sm, 0, 0);
-					let end: Date | undefined = undefined;
-					if (!isNaN(eh) && !isNaN(em)) {
-						end = new Date(record.date);
-						end.setHours(eh, em, 0, 0);
-					}
-					const newDurations = record.Durations.map((d, i) =>
-						i === idx ? { ...d, start, end } : d
+			const updated = await updateRecord(payload.record.key, (target) => {
+				if (payload.mode === 'duration') {
+					return updateSingleDuration(
+						target,
+						payload.durationIndex ?? null,
+						payload.startStr,
+						payload.endStr
 					);
-					record.Durations = newDurations;
 				}
-			} else if (payload.mode === 'lunch') {
-				const [sh, sm] = (payload.startStr ?? '').split(':').map(Number);
-				const [eh, em] = (payload.endStr ?? '').split(':').map(Number);
-				if (!isNaN(sh) && !isNaN(sm)) {
-					const start = new Date(record.date);
-					start.setHours(sh, sm, 0, 0);
-					let end: Date | undefined = undefined;
-					if (!isNaN(eh) && !isNaN(em)) {
-						end = new Date(record.date);
-						end.setHours(eh, em, 0, 0);
-					}
-					record.lunchDuration = { start, end };
-				}
-			} else if (payload.mode === 'internal') {
-				let val = (payload.internalStr ?? '').trim();
-				if (!val) {
-					record.internalCompanyTime = 0;
-				} else {
-					val = val.replace(',', '.');
-					let hours = parseFloat(val);
-					if (!isNaN(hours)) {
-						record.internalCompanyTime = Math.round(hours * 3600000);
-					} else {
-						record.internalCompanyTime = 0;
-					}
-				}
-			} else if (payload.mode === 'durations' && Array.isArray(payload.durations)) {
-				// Map incoming start/end strings to Dates and set record.Durations
-				const newDurations = payload.durations
-					.map((d) => {
-						const [sh, sm] = (d.startStr ?? '').split(':').map(Number);
-						const [eh, em] = (d.endStr ?? '').split(':').map(Number);
-						if (isNaN(sh) || isNaN(sm)) return null;
-						const start = new Date(record.date);
-						start.setHours(sh, sm, 0, 0);
-						let end: Date | undefined = undefined;
-						if (!isNaN(eh) && !isNaN(em)) {
-							end = new Date(record.date);
-							end.setHours(eh, em, 0, 0);
-						}
-						return { start, end };
-					})
-					.filter(Boolean) as Duration[];
 
-				record.Durations = newDurations;
+				if (payload.mode === 'durations') {
+					return replaceDurations(target, payload.durations ?? []);
+				}
+
+				if (payload.mode === 'lunch') {
+					return updateLunch(target, payload.startStr, payload.endStr);
+				}
+
+				return updateInternal(target, payload.internalStr);
+			});
+
+			if (updated) {
+				closeModal();
 			}
-			await idb.set(record);
-			records = records.map((r) => (r.key === record.key ? { ...record } : r));
-			error = null;
 		} catch (e) {
 			error = 'Failed to update record.';
 		}
-		// close modal and reset flags
-		modalOpen = false;
-		modalRecord = null;
-		modalDurationsOpen = false;
-		modalLunchOpen = false;
-		modalInternalOpen = false;
-		modalIdx = null;
 	}
 
 	function handleModalCancel() {
-		modalOpen = false;
-		modalRecord = null;
-		modalDurationsOpen = false;
-		modalLunchOpen = false;
-		modalInternalOpen = false;
-		modalIdx = null;
+		closeModal();
 	}
 
-	async function handleModalDelete(recordToDel: Keyed<TimeRecord> | null) {
-		if (!recordToDel) return;
+	async function handleModalDelete(recordToClear: Keyed<TimeRecord> | null) {
+		if (!recordToClear) return;
 		try {
-			// clear lunch on the record and persist
-			recordToDel.lunchDuration = undefined;
-			await idb.set(recordToDel);
-			records = records.map((r) => (r.key === recordToDel.key ? { ...recordToDel } : r));
-			error = null;
+			const cleared = await updateRecord(recordToClear.key, (target) => {
+				target.lunchDuration = undefined;
+				return true;
+			});
+
+			if (cleared) {
+				closeModal();
+			}
 		} catch (e) {
 			error = 'Failed to delete lunch.';
 		}
-		// close modal
-		modalOpen = false;
-		modalRecord = null;
-		modalDurationsOpen = false;
-		modalLunchOpen = false;
-		modalInternalOpen = false;
-		modalIdx = null;
 	}
 
-	async function handleModalDeleteInternal(recordToDel: Keyed<TimeRecord> | null) {
-		if (!recordToDel) return;
+	async function handleModalDeleteInternal(recordToClear: Keyed<TimeRecord> | null) {
+		if (!recordToClear) return;
 		try {
-			// clear internalCompanyTime on the record and persist
-			recordToDel.internalCompanyTime = undefined;
-			await idb.set(recordToDel);
-			records = records.map((r) => (r.key === recordToDel.key ? { ...recordToDel } : r));
-			error = null;
+			const cleared = await updateRecord(recordToClear.key, (target) => {
+				target.internalCompanyTime = undefined;
+				return true;
+			});
+
+			if (cleared) {
+				closeModal();
+			}
 		} catch (e) {
 			error = 'Failed to delete internal time.';
 		}
-		// close modal
-		modalOpen = false;
-		modalRecord = null;
-		modalDurationsOpen = false;
-		modalLunchOpen = false;
-		modalInternalOpen = false;
-		modalIdx = null;
-	}
-
-	function handleDelete(record: Keyed<TimeRecord>) {
-		deleteRecord = record;
-		confirmDialogOpen = true;
 	}
 
 	async function handleDeleteConfirm() {
-		if (!deleteRecord) return;
-		await idb.del(deleteRecord);
-		records = records.filter((r) => !isSameDay(r.date, deleteRecord!.date));
-		deleteRecord = null;
-		confirmDialogOpen = false;
+		if (!confirmState.open) return;
+		const record = confirmState.record;
+		try {
+			await idb.del(record);
+			records = records.filter((r) => r.key !== record.key);
+			error = null;
+		} catch (e) {
+			error = 'Failed to delete record.';
+		}
+		confirmState = { open: false };
+	}
+
+	async function updateRecord(
+		key: string,
+		mutate: (record: Keyed<TimeRecord>) => boolean | void
+	): Promise<boolean> {
+		const target = findRecord(key);
+		if (!target) return false;
+
+		const shouldPersist = mutate(target);
+		if (shouldPersist === false) return false;
+
+		await persist(target);
+		error = null;
+		return true;
+	}
+
+	async function persist(record: Keyed<TimeRecord>) {
+		await idb.set($state.snapshot(record));
+		records = records.map((item) => (item.key === record.key ? record : item));
+	}
+
+	function findRecord(key: string) {
+		return records.find((record) => record.key === key) ?? null;
 	}
 </script>
 
@@ -241,43 +215,46 @@
 				</thead>
 				<tbody>
 					{#each records as record}
-						<HistoryRow {record} onOpenEdit={openEditModal} onDelete={handleDelete} />
+						<HistoryRow
+							{record}
+							onOpenEdit={openEditModal}
+							onDelete={() => (confirmState = { open: true, record })}
+						/>
 					{/each}
 				</tbody>
 			</table>
-			{#if modalDurationsOpen}
-				<!-- If modalIdx is set we edit a single duration, otherwise edit all durations -->
+			{#if showDurationsModal()}
 				<EditDurationsModal
-					open={modalOpen}
-					record={modalRecord}
-					durationIndex={modalIdx}
+					open={isModalOpen()}
+					record={modalRecord()}
+					durationIndex={modalDurationIndex()}
 					onSave={handleModalSave}
 					onCancel={handleModalCancel}
 				/>
 			{/if}
-			{#if modalLunchOpen}
+			{#if showLunchModal()}
 				<EditLunchModal
-					open={modalOpen}
-					record={modalRecord}
+					open={isModalOpen()}
+					record={modalRecord()}
 					onSave={handleModalSave}
 					onCancel={handleModalCancel}
 					onDelete={handleModalDelete}
 				/>
 			{/if}
-			{#if modalInternalOpen}
+			{#if showInternalModal()}
 				<EditInternalModal
-					open={modalOpen}
-					record={modalRecord}
+					open={isModalOpen()}
+					record={modalRecord()}
 					onSave={handleModalSave}
 					onCancel={handleModalCancel}
 					onDelete={handleModalDeleteInternal}
 				/>
 			{/if}
 			<ConfirmDialog
-				open={confirmDialogOpen}
+				open={confirmOpen()}
 				message="Are you sure you want to delete this record? This action cannot be undone."
 				onConfirm={handleDeleteConfirm}
-				onCancel={() => (confirmDialogOpen = false)}
+				onCancel={() => (confirmState = { open: false })}
 			/>
 		</div>
 	{/if}
