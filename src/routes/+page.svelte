@@ -1,30 +1,37 @@
 <script lang="ts">
 	import type { TimeRecord } from '$lib/models/TimeRecord';
-	import { idb } from '$lib/utils/idbService';
+	import { idb, type Keyed } from '$lib/utils/KeyValueService';
 	import { format, differenceInMilliseconds } from 'date-fns';
 	import { onMount } from 'svelte';
 	import ActionButtons from '$lib/components/ActionButtons.svelte';
 	import TodayTimes from '$lib/components/TodayTimes.svelte';
 	import Toast from '$lib/components/Toast.svelte';
-	import EditSegmentModal from '$lib/components/EditSegmentModal.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import EditDurationsModal from '$lib/components/EditDurationsModal.svelte';
+	import EditLunchModal from '$lib/components/EditLunchModal.svelte';
 
-	const todayKey = 'record-' + format(new Date(), 'yyyy-MM-dd');
+	type ModalState =
+		| { kind: 'none' }
+		| { kind: 'durations'; index: number | null }
+		| { kind: 'lunch' };
 
-	let record = $state<TimeRecord>({
+	type ConfirmState = { open: false } | { open: true; target: number | 'lunch'; message: string };
+
+	let record = $state<Keyed<TimeRecord>>({
+		key: format(new Date(), 'yyyy-MM-dd'),
 		date: new Date(),
 		Durations: []
 	});
 	let toast = $state('');
 
 	onMount(() => {
-		idb.get<TimeRecord>(todayKey).then((value) => {
+		idb.get<TimeRecord>(record.key).then((value) => {
 			if (value) record = value;
 		});
 	});
 
 	$effect(() => {
-		idb.set<TimeRecord>(todayKey, $state.snapshot(record));
+		idb.set<TimeRecord>($state.snapshot(record));
 	});
 
 	const workDurations = $derived(() => record.Durations ?? []);
@@ -50,12 +57,10 @@
 			);
 		}
 
-		let internalMilliseconds = 0;
-		if (record.internalCompanyTime) {
-			internalMilliseconds = record.internalCompanyTime.getTime();
+		let workTimeMilliseconds = totalMilliseconds - lunchMilliseconds;
+		if (workTimeMilliseconds <= 0) {
+			return '00:00';
 		}
-
-		let workTimeMilliseconds = totalMilliseconds - lunchMilliseconds + internalMilliseconds;
 		const resultDate = new Date(new Date(0, 0, 0, 0, 0, 0, 0).getTime() + workTimeMilliseconds);
 		return format(resultDate, 'HH:mm');
 	});
@@ -97,143 +102,163 @@
 		toast = 'Lunch ended';
 	}
 
-	// Modal state for editing
-	let editModalOpen = $state(false);
-	let editIndex = $state<number | null>(null);
-	let editStart = $state<Date | null>(null);
-	let editEnd = $state<Date | null>(null);
-	let editStartStr = $state('');
-	let editEndStr = $state('');
+	// Modal state: each modal manages its own open/close state independently
+	let durationsModal = $state<{ open: boolean; index: number | null }>({
+		open: false,
+		index: null
+	});
+	const isDurationsModal = $derived(() => durationsModal.open);
+	const durationsModalIndex = $derived(() => durationsModal.index);
 
-	// Confirmation dialog state
-	let confirmOpen = $state(false);
-	let confirmMessage = $state('');
-	let confirmDeleteIndex = $state<number | 'lunch' | null>(null);
+	let lunchModalOpen = $state(false);
+	const isLunchModal = $derived(() => lunchModalOpen);
 
-	function pad(num: number) {
-		return num.toString().padStart(2, '0');
-	}
-	function toTimeStr(date: Date | null) {
-		if (!date) return '';
-		return pad(date.getHours()) + ':' + pad(date.getMinutes());
-	}
+	// Confirmation dialog state - per-modal
+	let durationsConfirm = $state<{ open: boolean; target: number | null; message: string }>({
+		open: false,
+		target: null,
+		message: ''
+	});
+	const durationsConfirmOpen = $derived(() => durationsConfirm.open);
+	const durationsConfirmMessage = $derived(() =>
+		durationsConfirm.open ? durationsConfirm.message : ''
+	);
+
+	let lunchConfirm = $state<{ open: boolean; message: string }>({ open: false, message: '' });
+	const lunchConfirmOpen = $derived(() => lunchConfirm.open);
+	const lunchConfirmMessage = $derived(() => (lunchConfirm.open ? lunchConfirm.message : ''));
+
 	function handleEdit(index: number | 'lunch') {
+		// Support -1 as the sentinel to open the shared durations editor for all durations
+		if (index === -1) {
+			durationsModal = { open: true, index: null };
+			return;
+		}
 		if (index === 'lunch') {
 			if (!record.lunchDuration) return;
-			editIndex = 'lunch';
-			editStart = record.lunchDuration.start;
-			editEnd = record.lunchDuration.end ?? null;
-			editStartStr = toTimeStr(editStart);
-			editEndStr = toTimeStr(editEnd);
-			editModalOpen = true;
+			lunchModalOpen = true;
 			return;
 		}
 		const dur = record.Durations?.[index];
 		if (!dur) return;
-		editIndex = index;
-		editStart = dur.start;
-		editEnd = dur.end ?? null;
-		editStartStr = toTimeStr(editStart);
-		editEndStr = toTimeStr(editEnd);
-		editModalOpen = true;
+		durationsModal = { open: true, index };
 	}
 
 	function handleDelete(index: number | 'lunch') {
-		confirmDeleteIndex = index;
-		confirmMessage =
-			index === 'lunch'
-				? 'Are you sure you want to delete the lunch record?'
-				: 'Are you sure you want to delete this work segment?';
-		confirmOpen = true;
+		if (index === 'lunch') {
+			lunchConfirm = { open: true, message: 'Are you sure you want to delete the lunch record?' };
+			return;
+		}
+		// durations deletion
+		durationsConfirm = {
+			open: true,
+			target: index,
+			message: 'Are you sure you want to delete this work segment?'
+		};
 	}
 
-	function handleConfirmDelete() {
-		if (confirmDeleteIndex === 'lunch') {
-			if (!record.lunchDuration) return;
-			record.lunchDuration = undefined;
-			toast = 'Lunch deleted.';
-		} else if (typeof confirmDeleteIndex === 'number' && record.Durations) {
-			record.Durations.splice(confirmDeleteIndex, 1);
+	function handleConfirmDurationsDelete() {
+		if (!durationsConfirm.open) return;
+		const target = durationsConfirm.target;
+		if (typeof target === 'number' && record.Durations) {
+			record.Durations.splice(target, 1);
 			toast = 'Segment deleted.';
 		}
-		confirmOpen = false;
-		confirmDeleteIndex = null;
-		confirmMessage = '';
+		durationsConfirm = { open: false, target: null, message: '' };
 	}
 
-	function handleCancelDelete() {
-		confirmOpen = false;
-		confirmDeleteIndex = null;
-		confirmMessage = '';
+	function handleCancelDurationsDelete() {
+		durationsConfirm = { open: false, target: null, message: '' };
 	}
 
-	function handleModalSave() {
-		const baseDate = record.date;
-		const [sh, sm] = editStartStr.split(':').map(Number);
-		const [eh, em] = editEndStr.split(':').map(Number);
-		if (editIndex === 'lunch') {
-			if (!record.lunchDuration) return;
-			record.lunchDuration.start = new Date(
-				baseDate.getFullYear(),
-				baseDate.getMonth(),
-				baseDate.getDate(),
-				sh,
-				sm
-			);
-			if (!isNaN(eh) && !isNaN(em)) {
-				record.lunchDuration.end = new Date(
-					baseDate.getFullYear(),
-					baseDate.getMonth(),
-					baseDate.getDate(),
-					eh,
-					em
-				);
-			} else {
-				record.lunchDuration.end = undefined;
-			}
-			toast = 'Lunch updated.';
-		} else {
-			if (editIndex === null || !record.Durations) return;
-			record.Durations[editIndex].start = new Date(
-				baseDate.getFullYear(),
-				baseDate.getMonth(),
-				baseDate.getDate(),
-				sh,
-				sm
-			);
-			if (!isNaN(eh) && !isNaN(em)) {
-				record.Durations[editIndex].end = new Date(
-					baseDate.getFullYear(),
-					baseDate.getMonth(),
-					baseDate.getDate(),
-					eh,
-					em
-				);
-			} else {
-				record.Durations[editIndex].end = undefined;
-			}
-			toast = 'Segment updated.';
+	function handleConfirmLunchDelete() {
+		if (!lunchConfirm.open) return;
+		if (record.lunchDuration) {
+			record.lunchDuration = undefined;
+			toast = 'Lunch deleted.';
 		}
-		editModalOpen = false;
-		editIndex = null;
-		editStart = null;
-		editEnd = null;
-		editStartStr = '';
-		editEndStr = '';
+		lunchConfirm = { open: false, message: '' };
 	}
 
-	function handleModalCancel() {
-		editModalOpen = false;
-		editIndex = null;
-		editStart = null;
-		editEnd = null;
-		editStartStr = '';
-		editEndStr = '';
+	function handleCancelLunchDelete() {
+		lunchConfirm = { open: false, message: '' };
+	}
+
+	function handleDurationsSave(payload?: any) {
+		if (!payload || !payload.record) return;
+		const baseDate = record.date;
+		if (payload.mode === 'duration') {
+			const idx = payload.durationIndex;
+			if (typeof idx !== 'number' || !record.Durations) return;
+			const start = toDateForDay(baseDate, payload.startStr);
+			const end = toDateForDay(baseDate, payload.endStr);
+			if (start) {
+				record.Durations[idx].start = start;
+			}
+			record.Durations[idx].end = end;
+			toast = 'Segment updated.';
+		} else if (payload.mode === 'durations' && Array.isArray(payload.durations)) {
+			// replace all durations
+			const existing = record.Durations ?? [];
+			record.Durations = payload.durations.map((d: any, idx: number) => {
+				const start =
+					toDateForDay(baseDate, d.startStr) ?? existing[idx]?.start ?? new Date(baseDate);
+				const end = toDateForDay(baseDate, d.endStr);
+				return { start, end };
+			});
+			toast = 'Durations updated.';
+		}
+		// close durations modal only
+		closeDurationsModal();
+	}
+
+	function handleLunchSave(payload?: any) {
+		if (!payload || !payload.record) return;
+		const baseDate = record.date;
+		const start =
+			toDateForDay(baseDate, payload.startStr) ?? record.lunchDuration?.start ?? new Date(baseDate);
+		const end = toDateForDay(baseDate, payload.endStr);
+		record.lunchDuration = { start, end };
+		toast = 'Lunch updated.';
+		// close lunch modal only
+		closeLunchModal();
+	}
+
+	function handleDurationsCancel() {
+		closeDurationsModal();
+	}
+
+	function handleLunchCancel() {
+		closeLunchModal();
+	}
+
+	function handleLunchDelete(recordToDel?: any) {
+		if (!recordToDel) return;
+		// remove lunch
+		record.lunchDuration = undefined;
+		toast = 'Lunch deleted.';
+		// close lunch modal
+		closeLunchModal();
 	}
 
 	function fmtTime(val?: Date) {
 		if (!val) return '';
 		return format(val, 'HH:mm');
+	}
+
+	function toDateForDay(day: Date, timeStr?: string) {
+		if (!timeStr) return undefined;
+		const [hours, minutes] = timeStr.split(':').map(Number);
+		if (Number.isNaN(hours) || Number.isNaN(minutes)) return undefined;
+		return new Date(day.getFullYear(), day.getMonth(), day.getDate(), hours, minutes);
+	}
+
+	function closeDurationsModal() {
+		durationsModal = { open: false, index: null };
+	}
+
+	function closeLunchModal() {
+		lunchModalOpen = false;
 	}
 </script>
 
@@ -252,21 +277,46 @@
 	<Toast {toast} />
 
 	<ConfirmDialog
-		open={confirmOpen}
-		message={confirmMessage}
-		onConfirm={handleConfirmDelete}
-		onCancel={handleCancelDelete}
+		open={durationsConfirmOpen()}
+		message={durationsConfirmMessage()}
+		onConfirm={handleConfirmDurationsDelete}
+		onCancel={handleCancelDurationsDelete}
+	/>
+	<ConfirmDialog
+		open={lunchConfirmOpen()}
+		message={lunchConfirmMessage()}
+		onConfirm={handleConfirmLunchDelete}
+		onCancel={handleCancelLunchDelete}
 	/>
 
-	<EditSegmentModal
-		open={editModalOpen}
-		startStr={editStartStr}
-		endStr={editEndStr}
-		setStartStr={(val: string) => (editStartStr = val)}
-		setEndStr={(val: string) => (editEndStr = val)}
-		onSave={handleModalSave}
-		onCancel={handleModalCancel}
-	/>
+	{#if isDurationsModal()}
+		<EditDurationsModal
+			open={isDurationsModal()}
+			{record}
+			durationIndex={durationsModalIndex()}
+			onSave={handleDurationsSave}
+			onCancel={handleDurationsCancel}
+		/>
+	{/if}
+	{#if isLunchModal()}
+		<EditLunchModal
+			open={isLunchModal()}
+			{record}
+			onSave={handleLunchSave}
+			onCancel={handleLunchCancel}
+			onDelete={() =>
+				(lunchConfirm = {
+					open: true,
+					message: 'Are you sure you want to delete the lunch record?'
+				})}
+		/>
+	{/if}
+
+	<a
+		href="/history"
+		class="mt-6 block w-full rounded bg-blue-600 py-2 text-center font-semibold text-white shadow transition hover:bg-blue-700 focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:outline-none"
+		>View History</a
+	>
 
 	<TodayTimes
 		{record}

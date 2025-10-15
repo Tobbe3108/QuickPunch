@@ -2,7 +2,7 @@ export type TimeRecord = {
 	date: Date;
 	Durations?: Duration[];
 	lunchDuration?: Duration;
-	internalCompanyTime?: Date;
+	internalCompanyTime?: number;
 };
 
 export type Duration = {

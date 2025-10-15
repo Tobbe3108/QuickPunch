@@ -44,15 +44,14 @@ QuickPunch is a Svelte 5 SPA for fast, accurate daily work hour tracking. It fea
 
 ## Epic & Issue Implementation Protocol
 
-When instructed to implement an Epic (e.g., "implement Epic (some id)"), you MUST:
+Whenever you are instructed to implement a issue you MUST:
 
-- Fetch the Epic issue and ALL its sub-issues recursively (including sub-issues of sub-issues).
-- For each Epic, implement all sub-issue features in the order they appear.
-- For each sub-issue, if it contains further sub-issues, fetch and implement those in order before proceeding.
-- Do NOT consider the Epic complete until all sub-issues and their sub-issues are fully implemented.
-- Always clarify and confirm the full issue hierarchy before starting implementation.
+- Discover and fetch information about the target issue, its parent issue (if any), all sub-issues, and recursively all sub-sub-issues at every level of the hierarchy.
+- For every issue, always clarify and confirm the full hierarchy: parent, sub-issues, and all nested sub-issues before starting implementation.
+- Implement all features and requirements for the target issue and all sub-issues and sub-sub-issues, in the exact order they appear in the hierarchy. (Do not implement the parent issue itself—use it only for context.)
+- Do NOT consider any issue complete until all its sub-issues and all nested sub-issues are fully implemented.
 
-This ensures that all features and requirements associated with an Epic are delivered completely and in the correct order.
+This protocol guarantees that, regardless of which issue level you are asked to implement, you will deliver all related features and requirements for the entire hierarchy (excluding parent issue implementation), in the correct order, with nothing omitted.
 
 ## References
 

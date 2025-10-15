@@ -1,5 +1,12 @@
 <script lang="ts">
 	let { record, workDurations, workTime, fmtTime, onEdit, onDelete } = $props();
+
+	const hasDurations = $derived(workDurations().length > 0);
+	const lunchLabel = $derived(
+		record.lunchDuration
+			? `${fmtTime(record.lunchDuration.start)} - ${fmtTime(record.lunchDuration.end)}`
+			: ''
+	);
 </script>
 
 <div class="mt-6">
@@ -11,19 +18,25 @@
 				{#if !dur.end}
 					<span class="ml-2 text-yellow-600">(Active)</span>
 				{/if}
-				<button class="btn-xs btn-outline ml-2" onclick={() => onEdit(i)}>Edit</button>
-				<button class="btn-xs btn-danger ml-1" onclick={() => onDelete(i)}>Delete</button>
 			</li>
 		{/each}
-		{#if record.lunchDuration}
-			<li class="flex items-center gap-2">
-				<span
-					>Lunch: {fmtTime(record.lunchDuration?.start)} - {fmtTime(
-						record.lunchDuration?.end
-					)}</span
+		{#if hasDurations}
+			<li>
+				<button
+					class="mt-2 rounded border border-blue-200 bg-blue-50 px-3 py-1 text-sm text-blue-600 hover:bg-blue-100 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+					onclick={() => onEdit(-1)}
 				>
-				<button class="btn-xs btn-outline ml-2" onclick={() => onEdit('lunch')}>Edit</button>
-				<button class="btn-xs btn-danger ml-1" onclick={() => onDelete('lunch')}>Delete</button>
+					Edit durations
+				</button>
+			</li>
+		{/if}
+		{#if lunchLabel}
+			<li class="flex items-center gap-2">
+				<span>Lunch: {lunchLabel}</span>
+				<button
+					class="ml-2 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-600 hover:bg-blue-100 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+					onclick={() => onEdit('lunch')}>Edit</button
+				>
 			</li>
 		{/if}
 		<li>Work Time: {workTime()}</li>
