@@ -6,7 +6,8 @@
 	let {
 		record,
 		onOpenEdit,
-		onDelete
+		onDelete,
+		onNavigate
 	}: {
 		record: Keyed<TimeRecord>;
 		onOpenEdit: (
@@ -15,7 +16,31 @@
 			idx?: number | null
 		) => void;
 		onDelete: (record: Keyed<TimeRecord>) => void;
+		onNavigate?: (dateStr: string) => void;
 	} = $props();
+
+	import { goto } from '$app/navigation';
+
+	function keyForDate(d: Date) {
+		const yyyy = d.getFullYear();
+		const mm = String(d.getMonth() + 1).padStart(2, '0');
+		const dd = String(d.getDate()).padStart(2, '0');
+		return `${yyyy}-${mm}-${dd}`;
+	}
+
+	function navigate(e?: MouseEvent) {
+		// don't navigate when clicking interactive elements inside the row
+		if (e) {
+			const target = e.target as HTMLElement | null;
+			if (target && target.closest('button')) return;
+		}
+		const key = keyForDate(record.date);
+		if (onNavigate) {
+			onNavigate(key);
+		} else {
+			goto(`/reporting?date=${key}`);
+		}
+	}
 
 	const formattedDate = $derived(() => (record.date ? format(record.date, 'PPPP') : ''));
 	const durationCount = $derived(() => record.Durations?.length ?? 0);
@@ -47,7 +72,7 @@
 	}
 </script>
 
-<tr class="border-t align-top">
+<tr class="border-t align-top" onclick={navigate} style="cursor: pointer">
 	<td class="px-4 py-2 whitespace-nowrap capitalize">
 		{formattedDate()}
 	</td>
