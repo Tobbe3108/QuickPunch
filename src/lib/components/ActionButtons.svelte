@@ -1,17 +1,19 @@
 <script lang="ts">
+	import { Button } from '$lib/components/ui/button';
+
 	let { availableActions, onWorkStart, onWorkStop, onLunchStart, onLunchEnd } = $props();
 </script>
 
 <div class="mb-4 flex flex-col gap-2">
 	{#if availableActions()[0] === 'workStart'}
-		<button class="btn-primary w-full" onclick={onWorkStart}>Start Work</button>
+		<Button class="w-full" onclick={onWorkStart}>Start Work</Button>
 	{:else}
-		<button class="btn-warning w-full" onclick={onWorkStop}>Stop Work</button>
+		<Button class="w-full" variant="destructive" onclick={onWorkStop}>Stop Work</Button>
 	{/if}
 	{#if availableActions().includes('lunchStart')}
-		<button class="btn-primary w-full" onclick={onLunchStart}>Start Lunch</button>
+		<Button class="w-full" onclick={onLunchStart}>Start Lunch</Button>
 	{/if}
 	{#if availableActions().includes('lunchEnd')}
-		<button class="btn-primary w-full" onclick={onLunchEnd}>End Lunch</button>
+		<Button class="w-full" onclick={onLunchEnd}>End Lunch</Button>
 	{/if}
 </div>
