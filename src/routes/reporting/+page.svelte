@@ -6,7 +6,6 @@
 	import type { TimeRecord } from '$lib/models/TimeRecord';
 	import { computeWorkTime, formatDecimalHours, parseDecimalHoursToMs } from '$lib/utils/timeCalc';
 	import { copyText } from '$lib/utils/copy';
-	import Toast from '$lib/components/Toast.svelte';
 	import { updateRecord } from '$lib/utils/recordMutations';
 	import { goto } from '$app/navigation';
 	import ReportingTable from '$lib/components/ReportingTable.svelte';
@@ -199,10 +198,4 @@
 			onCopy={async (label: string, val: string) => await handleCopy(label, val)}
 		/>
 	{/if}
-
-	<div class="fixed right-4 bottom-4 space-y-2">
-		{#each $toasts as t (t.id)}
-			<Toast toast={t.text} onClose={() => toasts.remove(t.id)} />
-		{/each}
-	</div>
 </div>

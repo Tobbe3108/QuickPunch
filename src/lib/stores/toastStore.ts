@@ -1,20 +1,12 @@
-import { writable } from 'svelte/store';
+import { toast as sonnerToast } from 'svelte-sonner';
 
-export type ToastItem = { id: number; text: string };
-
-const { subscribe, update } = writable<ToastItem[]>([]);
-
-let nextId = 1;
-
+/**
+ * Unified toast API using svelte-sonner.
+ * Replaces custom toast store with Sonner's toast() function.
+ */
 export const toasts = {
-	subscribe,
 	push(text: string) {
-		const id = nextId++;
-		update((s) => [...s, { id, text }]);
-		return id;
-	},
-	remove(id: number) {
-		update((s) => s.filter((t) => t.id !== id));
+		return sonnerToast(text);
 	}
 };
 

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { Button } from '$lib/components/ui/button';
+
 	let { record, workDurations, workTime, fmtTime, onEdit, onDelete } = $props();
 
 	const hasDurations = $derived(workDurations().length > 0);
@@ -22,21 +24,15 @@
 		{/each}
 		{#if hasDurations}
 			<li>
-				<button
-					class="mt-2 rounded border border-blue-200 bg-blue-50 px-3 py-1 text-sm text-blue-600 hover:bg-blue-100 focus:ring-2 focus:ring-blue-400 focus:outline-none"
-					onclick={() => onEdit(-1)}
-				>
+				<Button class="mt-2" variant="outline" size="sm" onclick={() => onEdit(-1)}>
 					Edit durations
-				</button>
+				</Button>
 			</li>
 		{/if}
 		{#if lunchLabel}
 			<li class="flex items-center gap-2">
 				<span>Lunch: {lunchLabel}</span>
-				<button
-					class="ml-2 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-600 hover:bg-blue-100 focus:ring-2 focus:ring-blue-400 focus:outline-none"
-					onclick={() => onEdit('lunch')}>Edit</button
-				>
+				<Button class="ml-2" variant="ghost" size="sm" onclick={() => onEdit('lunch')}>Edit</Button>
 			</li>
 		{/if}
 		<li>Work Time: {workTime()}</li>

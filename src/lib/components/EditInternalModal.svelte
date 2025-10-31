@@ -2,6 +2,10 @@
 	import type { Keyed } from '../utils/KeyValueService';
 	import type { TimeRecord } from '../models/TimeRecord';
 	import ConfirmDialog from './ConfirmDialog.svelte';
+	import * as Dialog from '$lib/components/ui/dialog';
+	import { Button } from '$lib/components/ui/button';
+	import { Label } from '$lib/components/ui/label';
+	import { Input } from '$lib/components/ui/input';
 
 	let {
 		open = false,
@@ -103,49 +107,37 @@
 	}
 </script>
 
-{#if open}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
-		onkeydown={(e) => e.key === 'Escape' && onCancel?.()}
-		tabindex="-1"
-		role="presentation"
-	>
-		<div
-			class="w-80 rounded bg-white p-4"
-			role="dialog"
-			aria-modal="true"
-			aria-label="Edit internal time"
-		>
-			<h3 class="mb-2 font-semibold">Edit internal time</h3>
-			<label class="mb-2 block">
-				Internal time (decimal hours or HH:MM):
-				<input type="text" class="input input-bordered w-full" bind:value={internalStr} />
-			</label>
-			{#if error}
-				<div class="mb-2 text-red-600">{error}</div>
-			{/if}
-			<div class="mt-4 flex gap-2">
-				<button class="btn-primary" onclick={handleSave}>Save</button>
-				<button class="btn-outline" onclick={onCancel}>Cancel</button>
-
-				<button
-					class="ml-auto inline-flex items-center rounded border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100 focus:ring-2 focus:ring-red-400 focus:outline-none"
-					onclick={() => (confirmOpen = true)}
-				>
-					Delete
-				</button>
+<Dialog.Root {open}>
+	<Dialog.Content class="sm:max-w-sm">
+		<Dialog.Header>
+			<Dialog.Title>Edit internal time</Dialog.Title>
+		</Dialog.Header>
+		<div class="space-y-4">
+			<div class="space-y-2">
+				<Label for="internal-time">Internal time</Label>
+				<Input id="internal-time" type="time" bind:value={internalStr} />
 			</div>
-
-			<ConfirmDialog
-				open={confirmOpen}
-				message="Delete internal time? This cannot be undone."
-				onConfirm={() => {
-					onDelete && record && onDelete(record);
-					confirmOpen = false;
-					onCancel?.();
-				}}
-				onCancel={() => (confirmOpen = false)}
-			/>
+			{#if error}
+				<div class="text-sm text-destructive">{error}</div>
+			{/if}
 		</div>
-	</div>
-{/if}
+		<Dialog.Footer class="mt-4 flex-col gap-2 sm:flex-row sm:justify-between">
+			<Button variant="destructive" size="sm" onclick={() => (confirmOpen = true)}>Delete</Button>
+			<div class="flex gap-2">
+				<Button variant="outline" onclick={onCancel}>Cancel</Button>
+				<Button onclick={handleSave}>Save</Button>
+			</div>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
+
+<ConfirmDialog
+	open={confirmOpen}
+	message="Delete internal time? This cannot be undone."
+	onConfirm={() => {
+		onDelete && record && onDelete(record);
+		confirmOpen = false;
+		onCancel?.();
+	}}
+	onCancel={() => (confirmOpen = false)}
+/>

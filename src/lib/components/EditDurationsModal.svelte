@@ -1,6 +1,9 @@
 <script lang="ts">
 	import type { Keyed } from '../utils/KeyValueService';
 	import type { TimeRecord } from '../models/TimeRecord';
+	import * as Dialog from '$lib/components/ui/dialog';
+	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
 
 	let {
 		open = false,
@@ -94,53 +97,42 @@
 	}
 </script>
 
-{#if open}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
-		onkeydown={(e) => e.key === 'Escape' && onCancel?.()}
-		tabindex="-1"
-		role="presentation"
-	>
-		<div
-			class="w-96 rounded bg-white p-4"
-			role="dialog"
-			aria-modal="true"
-			aria-label="Edit durations"
-		>
-			<h3 class="mb-2 font-semibold">Edit durations</h3>
-			<div class="space-y-2">
-				{#each durationsArr as d, i}
-					<div class="flex items-center gap-2">
-						<input
-							type="time"
-							class="input input-bordered w-32"
-							bind:value={d.startStr}
-							aria-label={`Start ${i + 1}`}
-						/>
-						<span>-</span>
-						<input
-							type="time"
-							class="input input-bordered w-32"
-							bind:value={d.endStr}
-							aria-label={`End ${i + 1}`}
-						/>
-						<button class="ml-2 text-sm text-red-600" onclick={() => durationsArr.splice(i, 1)}
-							>Remove</button
-						>
-					</div>
-				{/each}
-			</div>
-			<button
-				class="mt-2 text-sm text-blue-600"
-				onclick={() => durationsArr.push({ startStr: '', endStr: '' })}>Add duration</button
-			>
-			{#if error}
-				<div class="mt-2 text-red-600">{error}</div>
-			{/if}
-			<div class="mt-4 flex gap-2">
-				<button class="btn-primary" onclick={handleSave}>Save</button>
-				<button class="btn-outline" onclick={onCancel}>Cancel</button>
-			</div>
+<Dialog.Root {open}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Edit durations</Dialog.Title>
+		</Dialog.Header>
+		<div class="space-y-2">
+			{#each durationsArr as d, i}
+				<div class="flex items-center gap-2">
+					<Input type="time" class="w-32" bind:value={d.startStr} aria-label={`Start ${i + 1}`} />
+					<span>-</span>
+					<Input type="time" class="w-32" bind:value={d.endStr} aria-label={`End ${i + 1}`} />
+					<Button
+						variant="ghost"
+						size="sm"
+						class="ml-2 text-destructive"
+						onclick={() => durationsArr.splice(i, 1)}
+					>
+						Remove
+					</Button>
+				</div>
+			{/each}
 		</div>
-	</div>
-{/if}
+		<Button
+			variant="link"
+			size="sm"
+			class="mt-2"
+			onclick={() => durationsArr.push({ startStr: '', endStr: '' })}
+		>
+			Add duration
+		</Button>
+		{#if error}
+			<div class="mt-2 text-sm text-destructive">{error}</div>
+		{/if}
+		<Dialog.Footer class="mt-4">
+			<Button variant="outline" onclick={onCancel}>Cancel</Button>
+			<Button onclick={handleSave}>Save</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

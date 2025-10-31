@@ -3,12 +3,13 @@
 	import { idb, type Keyed } from '$lib/utils/KeyValueService';
 	import { format, differenceInMilliseconds } from 'date-fns';
 	import { onMount } from 'svelte';
+	import { toasts } from '$lib/stores/toastStore';
 	import ActionButtons from '$lib/components/ActionButtons.svelte';
 	import TodayTimes from '$lib/components/TodayTimes.svelte';
-	import Toast from '$lib/components/Toast.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import EditDurationsModal from '$lib/components/EditDurationsModal.svelte';
 	import EditLunchModal from '$lib/components/EditLunchModal.svelte';
+	import { Button } from '$lib/components/ui/button';
 
 	type ModalState =
 		| { kind: 'none' }
@@ -22,7 +23,6 @@
 		date: new Date(),
 		Durations: []
 	});
-	let toast = $state('');
 
 	onMount(() => {
 		idb.get<TimeRecord>(record.key).then((value) => {
@@ -80,13 +80,13 @@
 
 		record.Durations?.push({ start: now });
 
-		toast = 'Work started.';
+		toasts.push('Work started.');
 	}
 
 	function handleWorkStop() {
 		const active = activeDuration();
 		active!.end = new Date();
-		toast = 'Work stopped.';
+		toasts.push('Work stopped.');
 	}
 
 	function handleLunchStart() {
@@ -94,12 +94,12 @@
 		const active = activeDuration();
 		if (active && !active.end) active.end = now;
 		record.lunchDuration = { start: now };
-		toast = 'Lunch started.';
+		toasts.push('Lunch started.');
 	}
 
 	function handleLunchEnd() {
 		record.lunchDuration!.end = new Date();
-		toast = 'Lunch ended';
+		toasts.push('Lunch ended');
 	}
 
 	// Modal state: each modal manages its own open/close state independently
@@ -162,7 +162,7 @@
 		const target = durationsConfirm.target;
 		if (typeof target === 'number' && record.Durations) {
 			record.Durations.splice(target, 1);
-			toast = 'Segment deleted.';
+			toasts.push('Segment deleted.');
 		}
 		durationsConfirm = { open: false, target: null, message: '' };
 	}
@@ -175,7 +175,7 @@
 		if (!lunchConfirm.open) return;
 		if (record.lunchDuration) {
 			record.lunchDuration = undefined;
-			toast = 'Lunch deleted.';
+			toasts.push('Lunch deleted.');
 		}
 		lunchConfirm = { open: false, message: '' };
 	}
@@ -196,7 +196,7 @@
 				record.Durations[idx].start = start;
 			}
 			record.Durations[idx].end = end;
-			toast = 'Segment updated.';
+			toasts.push('Segment updated.');
 		} else if (payload.mode === 'durations' && Array.isArray(payload.durations)) {
 			// replace all durations
 			const existing = record.Durations ?? [];
@@ -206,7 +206,7 @@
 				const end = toDateForDay(baseDate, d.endStr);
 				return { start, end };
 			});
-			toast = 'Durations updated.';
+			toasts.push('Durations updated.');
 		}
 		// close durations modal only
 		closeDurationsModal();
@@ -219,7 +219,7 @@
 			toDateForDay(baseDate, payload.startStr) ?? record.lunchDuration?.start ?? new Date(baseDate);
 		const end = toDateForDay(baseDate, payload.endStr);
 		record.lunchDuration = { start, end };
-		toast = 'Lunch updated.';
+		toasts.push('Lunch updated.');
 		// close lunch modal only
 		closeLunchModal();
 	}
@@ -236,7 +236,7 @@
 		if (!recordToDel) return;
 		// remove lunch
 		record.lunchDuration = undefined;
-		toast = 'Lunch deleted.';
+		toasts.push('Lunch deleted.');
 		// close lunch modal
 		closeLunchModal();
 	}
@@ -274,8 +274,6 @@
 		onLunchEnd={handleLunchEnd}
 	/>
 
-	<Toast {toast} />
-
 	<ConfirmDialog
 		open={durationsConfirmOpen()}
 		message={durationsConfirmMessage()}
@@ -312,11 +310,7 @@
 		/>
 	{/if}
 
-	<a
-		href="/history"
-		class="mt-6 block w-full rounded bg-blue-600 py-2 text-center font-semibold text-white shadow transition hover:bg-blue-700 focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:outline-none"
-		>View History</a
-	>
+	<Button href="/history" class="mt-6 w-full">View History</Button>
 
 	<TodayTimes
 		{record}

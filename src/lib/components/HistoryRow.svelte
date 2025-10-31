@@ -2,6 +2,8 @@
 	import type { Keyed } from '../utils/KeyValueService';
 	import type { TimeRecord } from '../models/TimeRecord';
 	import { format, isValid } from 'date-fns';
+	import { Button } from '$lib/components/ui/button';
+	import * as Table from '$lib/components/ui/table';
 
 	let {
 		record,
@@ -72,43 +74,51 @@
 	}
 </script>
 
-<tr class="border-t align-top" onclick={navigate} style="cursor: pointer">
-	<td class="px-4 py-2 whitespace-nowrap capitalize">
+<Table.Row class="cursor-pointer align-top" onclick={navigate}>
+	<Table.Cell class="whitespace-nowrap capitalize">
 		{formattedDate()}
-	</td>
-	<td class="px-4 py-2 whitespace-nowrap">
+	</Table.Cell>
+	<Table.Cell class="whitespace-nowrap">
 		{durationCount()}
 
-		<button
-			class="ml-2 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-600 hover:bg-blue-100 focus:ring-2 focus:ring-blue-400 focus:outline-none"
-			onclick={() => onOpenEdit(record, 'duration')}>Edit</button
-		>
-	</td>
-	<td class="px-4 py-2 whitespace-nowrap">
+		<Button class="ml-2" variant="ghost" size="sm" onclick={() => onOpenEdit(record, 'duration')}>
+			Edit
+		</Button>
+	</Table.Cell>
+	<Table.Cell class="whitespace-nowrap">
 		{#if lunchLabel}
 			<span>{lunchLabel()}</span>
 		{/if}
-		<button
-			class="ml-2 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-600 hover:bg-blue-100 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+		<Button
+			class="ml-2"
+			variant="ghost"
+			size="sm"
 			aria-label="Edit lunch"
-			onclick={() => onOpenEdit(record, 'lunch')}>Edit</button
+			onclick={() => onOpenEdit(record, 'lunch')}
 		>
-	</td>
-	<td class="px-4 py-2 whitespace-nowrap">
+			Edit
+		</Button>
+	</Table.Cell>
+	<Table.Cell class="whitespace-nowrap">
 		<span>{internalLabel()}</span>
-		<button
-			class="ml-2 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-600 hover:bg-blue-100 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+		<Button
+			class="ml-2"
+			variant="ghost"
+			size="sm"
 			aria-label="Edit internal time"
-			onclick={() => onOpenEdit(record, 'internal')}>Edit</button
+			onclick={() => onOpenEdit(record, 'internal')}
 		>
-	</td>
-	<td class="flex flex-col gap-2 px-4 py-2 whitespace-nowrap">
-		<button
-			class="inline-flex items-center rounded border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100 focus:ring-2 focus:ring-red-400 focus:outline-none"
+			Edit
+		</Button>
+	</Table.Cell>
+	<Table.Cell class="flex flex-col gap-2 whitespace-nowrap">
+		<Button
+			variant="destructive"
+			size="sm"
 			aria-label="Delete record"
 			onclick={() => onDelete(record)}
 		>
 			Delete
-		</button>
-	</td>
-</tr>
+		</Button>
+	</Table.Cell>
+</Table.Row>

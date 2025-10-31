@@ -1,16 +1,20 @@
 <script lang="ts">
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
+
 	let { open, message, onConfirm, onCancel } = $props();
 </script>
 
-{#if open}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-		<div class="w-80 rounded bg-white p-4 shadow-lg">
-			<h3 class="mb-2 font-semibold">Confirm Action</h3>
-			<div class="mb-4 text-gray-700">{message}</div>
-			<div class="flex justify-end gap-2">
-				<button class="btn-primary" onclick={onConfirm}>Confirm</button>
-				<button class="btn-outline" onclick={onCancel}>Cancel</button>
-			</div>
-		</div>
-	</div>
-{/if}
+<AlertDialog.Root {open}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>Confirm Action</AlertDialog.Title>
+			<AlertDialog.Description>
+				{message}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel onclick={onCancel}>Cancel</AlertDialog.Cancel>
+			<AlertDialog.Action onclick={onConfirm}>Confirm</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>

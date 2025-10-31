@@ -2,6 +2,8 @@
 	import type { Keyed } from '$lib/utils/KeyValueService';
 	import type { TimeRecord } from '$lib/models/TimeRecord';
 	import { formatTimeHHMM, formatDecimalHours } from '$lib/utils/timeCalc';
+	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
 
 	export let record: Keyed<TimeRecord> | null = null;
 	export let index = -1;
@@ -38,11 +40,8 @@
 	<div class="flex flex-col gap-4">
 		<div class="flex items-center justify-between">
 			<div class="flex gap-2">
-				<button class="rounded border px-3 py-1" onclick={onPrev} disabled={index <= 0}>Prev</button
-				>
-				<button class="rounded border px-3 py-1" onclick={onNext} disabled={index >= total - 1}
-					>Next</button
-				>
+				<Button variant="outline" onclick={onPrev} disabled={index <= 0}>Prev</Button>
+				<Button variant="outline" onclick={onNext} disabled={index >= total - 1}>Next</Button>
 			</div>
 
 			<div class="text-sm text-gray-600">
@@ -75,8 +74,8 @@
 			<!-- Editable input for internal time is separated from the display/copy action -->
 			<div class="col-span-4 text-xs text-gray-500">Edit internal</div>
 			<div class="col-span-7">
-				<input
-					class="w-full rounded border px-2 py-1 text-sm"
+				<Input
+					class="h-8 text-sm"
 					aria-label="Edit internal company time"
 					bind:value={internalInputStr}
 					onblur={() => onPersistInternal?.(internalInputStr)}
@@ -87,26 +86,32 @@
 			<div class="col-span-4 text-xs text-gray-500">Internal</div>
 			<div class="col-span-7">{displayInternal}</div>
 			<div class="col-span-1 text-right">
-				<button
-					class="text-blue-600"
+				<Button
+					variant="link"
+					size="sm"
 					onclick={() => onCopy('Internal', displayInternal)}
-					aria-label="Copy internal time">Copy</button
+					aria-label="Copy internal time"
 				>
+					Copy
+				</Button>
 			</div>
 
 			<div class="col-span-4 text-xs text-gray-500">Work</div>
 			<div class="col-span-7">{workMs === null ? '' : formatDecimalHours(workMs)}</div>
 			<div class="col-span-1 text-right">
-				<button
-					class="text-blue-600"
+				<Button
+					variant="link"
+					size="sm"
 					onclick={() => onCopy('Work', workMs === null ? '' : formatDecimalHours(workMs))}
-					aria-label="Copy work time">Copy</button
+					aria-label="Copy work time"
 				>
+					Copy
+				</Button>
 			</div>
 		</div>
 
 		<div class="flex justify-end">
-			<button class="rounded border px-3 py-1" onclick={onBack}>Back to history</button>
+			<Button variant="outline" onclick={onBack}>Back to history</Button>
 		</div>
 	</div>
 {/if}

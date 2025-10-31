@@ -9,6 +9,7 @@
 	import EditDurationsModal from './EditDurationsModal.svelte';
 	import EditLunchModal from './EditLunchModal.svelte';
 	import EditInternalModal from './EditInternalModal.svelte';
+	import * as Table from '$lib/components/ui/table';
 	import {
 		replaceDurations,
 		updateInternal,
@@ -203,17 +204,17 @@
 		<div class="text-gray-500">No history records found.</div>
 	{:else}
 		<div class="overflow-x-auto">
-			<table class="min-w-full rounded-lg border border-gray-200 bg-white shadow">
-				<thead class="bg-gray-50">
-					<tr>
-						<th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Date</th>
-						<th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Durations</th>
-						<th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Lunch</th>
-						<th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Internal</th>
-						<th class="px-4 py-2"></th>
-					</tr>
-				</thead>
-				<tbody>
+			<Table.Root>
+				<Table.Header>
+					<Table.Row>
+						<Table.Head>Date</Table.Head>
+						<Table.Head>Durations</Table.Head>
+						<Table.Head>Lunch</Table.Head>
+						<Table.Head>Internal</Table.Head>
+						<Table.Head class="w-[100px]"></Table.Head>
+					</Table.Row>
+				</Table.Header>
+				<Table.Body>
 					{#each records as record}
 						<HistoryRow
 							{record}
@@ -221,8 +222,8 @@
 							onDelete={() => (confirmState = { open: true, record })}
 						/>
 					{/each}
-				</tbody>
-			</table>
+				</Table.Body>
+			</Table.Root>
 			{#if showDurationsModal()}
 				<EditDurationsModal
 					open={isModalOpen()}
